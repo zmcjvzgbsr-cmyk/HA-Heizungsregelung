@@ -27,5 +27,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install pytest pytest-homeassistant-custom-component
-      - run: pytest -q tests
+      - run: pip install pytest pytest-timeout pytest-homeassistant-custom-component
+      - name: pytest
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          pytest -q -s --timeout=180 tests 2>&1 | tee out.txt || { python3 -c "t=open('out.txt').read()[-7000:]; print('::error title=pytest::' + t.replace('%','%25').replace('\r','').replace('\n','%0A'))"; exit 1; }
+          python3 -c "t=[l for l in open('out.txt') if l.startswith('ENTITIES')]; print('::notice title=entities::' + ''.join(t)[:3000].replace('\n','%0A'))"
