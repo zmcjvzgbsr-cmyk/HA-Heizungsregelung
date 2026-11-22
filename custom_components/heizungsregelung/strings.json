@@ -1,0 +1,210 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up heating control",
+        "description": "Basic settings. Add rooms afterwards via 'Configure'. The controller starts in observation mode and changes nothing until you enable 'Eingriffe aktiv'.",
+        "data": {
+          "boiler_climate": "Boiler (climate entity)",
+          "persons": "Persons for presence",
+          "label_alltag": "Label of everyday schedules",
+          "label_urlaub": "Label of holiday-at-home schedules",
+          "abwesend_plan": "Schedule for 'holiday away'",
+          "notify_services": "Send notifications to"
+        },
+        "data_description": {
+          "boiler_climate": "Climate entity of the boiler. Its room sensor (current_temperature) is the base value; its setpoint is controlled.",
+          "persons": "When all of them are away, the controller switches to away. Leave empty to disable presence logic.",
+          "label_alltag": "Scheduler schedules with this label run in everyday mode.",
+          "label_urlaub": "Scheduler schedules with this label run in 'holiday at home'.",
+          "abwesend_plan": "Optional. Runs in 'holiday away'; otherwise the holiday-away temperature is used.",
+          "notify_services": "E.g. notify.mobile_app_iphone. Used for window reminders."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Heating control is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Heating control",
+        "menu_options": {
+          "settings": "Basic settings",
+          "add_room": "Add room",
+          "select_room": "Edit room",
+          "remove_room": "Remove room"
+        }
+      },
+      "settings": {
+        "title": "Basic settings",
+        "data": {
+          "boiler_climate": "Boiler (climate entity)",
+          "persons": "Persons for presence",
+          "label_alltag": "Label of everyday schedules",
+          "label_urlaub": "Label of holiday-at-home schedules",
+          "abwesend_plan": "Schedule for 'holiday away'",
+          "notify_services": "Send notifications to"
+        },
+        "data_description": {
+          "boiler_climate": "Climate entity of the boiler. Its room sensor (current_temperature) is the base value; its setpoint is controlled.",
+          "persons": "When all of them are away, the controller switches to away. Leave empty to disable presence logic.",
+          "label_alltag": "Scheduler schedules with this label run in everyday mode.",
+          "label_urlaub": "Scheduler schedules with this label run in 'holiday at home'.",
+          "abwesend_plan": "Optional. Runs in 'holiday away'; otherwise the holiday-away temperature is used.",
+          "notify_services": "E.g. notify.mobile_app_iphone. Used for window reminders."
+        }
+      },
+      "add_room": {
+        "title": "Add room",
+        "sections": {
+          "grund": {
+            "name": "Room",
+            "data": {
+              "name": "Name",
+              "climate": "Thermostat",
+              "temperature_sensor": "Room temperature sensor",
+              "window_sensor": "Window sensor",
+              "in_demand": "Counts towards demand",
+              "heimkehr_boost": "Apply homecoming temperature",
+              "max_temperature": "Maximum temperature"
+            },
+            "data_description": {
+              "climate": "E.g. the Better Thermostat entity.",
+              "temperature_sensor": "Optional. Otherwise the thermostat's current temperature.",
+              "window_sensor": "Optional. Open window: room does not count towards demand.",
+              "in_demand": "Off: room never calls for the boiler (e.g. hallway).",
+              "heimkehr_boost": "On homecoming raise at least to the homecoming temperature.",
+              "max_temperature": "Optional. Higher setpoints are capped to this value."
+            }
+          },
+          "ausnahme": {
+            "name": "Exception while away",
+            "data": {
+              "away_exception": "Exception enabled",
+              "away_exception_start": "Start",
+              "away_exception_end": "End",
+              "away_exception_end_friday": "End on Fridays",
+              "away_exception_temperature": "Temperature"
+            },
+            "data_description": {
+              "away_exception_end_friday": "Optional, different end on Friday."
+            },
+            "description": "E.g. children's room: warm in the afternoon even if the parents are away."
+          },
+          "rhythmus": {
+            "name": "Recurring absence",
+            "data": {
+              "rhythm": "Offer for this room",
+              "rhythm_weekday": "Start weekday",
+              "rhythm_start": "Start time",
+              "rhythm_duration_hours": "Duration",
+              "rhythm_interval_days": "Repeat every",
+              "rhythm_temperature": "Temperature meanwhile"
+            },
+            "data_description": {
+              "rhythm_duration_hours": "Fri 16:00 to Sun 15:00 = 47 h.",
+              "rhythm_interval_days": "14 = every other weekend."
+            },
+            "description": "E.g. every other weekend at the other parent's. Switch and dates appear as entities."
+          },
+          "erinnerung": {
+            "name": "Window reminder",
+            "data": {
+              "window_reminder": "Reminder enabled",
+              "humidity_sensor": "Humidity sensor",
+              "reminder_minutes": "Remind after",
+              "reminder_humidity_below": "Humidity below"
+            },
+            "data_description": {
+              "humidity_sensor": "Optional. Remind only once humidity is below the limit."
+            }
+          }
+        }
+      },
+      "edit_room": {
+        "title": "Edit room: {name}",
+        "sections": {
+          "grund": {
+            "name": "Room",
+            "data": {
+              "name": "Name",
+              "climate": "Thermostat",
+              "temperature_sensor": "Room temperature sensor",
+              "window_sensor": "Window sensor",
+              "in_demand": "Counts towards demand",
+              "heimkehr_boost": "Apply homecoming temperature",
+              "max_temperature": "Maximum temperature"
+            },
+            "data_description": {
+              "climate": "E.g. the Better Thermostat entity.",
+              "temperature_sensor": "Optional. Otherwise the thermostat's current temperature.",
+              "window_sensor": "Optional. Open window: room does not count towards demand.",
+              "in_demand": "Off: room never calls for the boiler (e.g. hallway).",
+              "heimkehr_boost": "On homecoming raise at least to the homecoming temperature.",
+              "max_temperature": "Optional. Higher setpoints are capped to this value."
+            }
+          },
+          "ausnahme": {
+            "name": "Exception while away",
+            "data": {
+              "away_exception": "Exception enabled",
+              "away_exception_start": "Start",
+              "away_exception_end": "End",
+              "away_exception_end_friday": "End on Fridays",
+              "away_exception_temperature": "Temperature"
+            },
+            "data_description": {
+              "away_exception_end_friday": "Optional, different end on Friday."
+            },
+            "description": "E.g. children's room: warm in the afternoon even if the parents are away."
+          },
+          "rhythmus": {
+            "name": "Recurring absence",
+            "data": {
+              "rhythm": "Offer for this room",
+              "rhythm_weekday": "Start weekday",
+              "rhythm_start": "Start time",
+              "rhythm_duration_hours": "Duration",
+              "rhythm_interval_days": "Repeat every",
+              "rhythm_temperature": "Temperature meanwhile"
+            },
+            "data_description": {
+              "rhythm_duration_hours": "Fri 16:00 to Sun 15:00 = 47 h.",
+              "rhythm_interval_days": "14 = every other weekend."
+            },
+            "description": "E.g. every other weekend at the other parent's. Switch and dates appear as entities."
+          },
+          "erinnerung": {
+            "name": "Window reminder",
+            "data": {
+              "window_reminder": "Reminder enabled",
+              "humidity_sensor": "Humidity sensor",
+              "reminder_minutes": "Remind after",
+              "reminder_humidity_below": "Humidity below"
+            },
+            "data_description": {
+              "humidity_sensor": "Optional. Remind only once humidity is below the limit."
+            }
+          }
+        }
+      },
+      "select_room": {
+        "title": "Which room to edit?",
+        "data": {
+          "room_id": "Room"
+        }
+      },
+      "remove_room": {
+        "title": "Which room to remove?",
+        "data": {
+          "room_id": "Room"
+        }
+      }
+    },
+    "error": {
+      "exception_times": "The away exception needs a start and an end time."
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "domain": "heizungsregelung",
+  "name": "Heizungsregelung",
+  "after_dependencies": ["scheduler", "person", "notify"],
+  "codeowners": ["@zmcjvzgbsr-cmyk"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/zmcjvzgbsr-cmyk/HA-Heizungsregelung",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/zmcjvzgbsr-cmyk/HA-Heizungsregelung/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

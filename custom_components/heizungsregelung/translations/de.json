@@ -1,0 +1,210 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Heizungsregelung einrichten",
+        "description": "Grundeinstellungen. Räume fügst du danach über „Konfigurieren“ hinzu. Die Regelung startet im Beobachtungsmodus und schaltet nichts, bis du „Eingriffe aktiv“ einschaltest.",
+        "data": {
+          "boiler_climate": "Kessel (Thermostat-Entität)",
+          "persons": "Personen für die Anwesenheit",
+          "label_alltag": "Label der Alltagspläne",
+          "label_urlaub": "Label der Urlaubspläne",
+          "abwesend_plan": "Plan für „Urlaub weg“",
+          "notify_services": "Benachrichtigungen an"
+        },
+        "data_description": {
+          "boiler_climate": "Die Klimaentität des Kessels. Ihr Raumfühler (current_temperature) ist der Grundwert, ihr Sollwert wird geregelt.",
+          "persons": "Sind alle diese Personen weg, schaltet die Regelung auf Abwesenheit. Leer lassen = keine Anwesenheitslogik.",
+          "label_alltag": "Scheduler-Pläne mit diesem Label laufen im Alltag.",
+          "label_urlaub": "Scheduler-Pläne mit diesem Label laufen bei „Urlaub zuhause“.",
+          "abwesend_plan": "Optional. Läuft bei „Urlaub weg“; sonst gilt die Urlaub-weg-Temperatur.",
+          "notify_services": "Z. B. notify.mobile_app_iphone. Für die Fenster-Erinnerungen."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Die Heizungsregelung ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Heizungsregelung",
+        "menu_options": {
+          "settings": "Grundeinstellungen",
+          "add_room": "Raum hinzufügen",
+          "select_room": "Raum bearbeiten",
+          "remove_room": "Raum entfernen"
+        }
+      },
+      "settings": {
+        "title": "Grundeinstellungen",
+        "data": {
+          "boiler_climate": "Kessel (Thermostat-Entität)",
+          "persons": "Personen für die Anwesenheit",
+          "label_alltag": "Label der Alltagspläne",
+          "label_urlaub": "Label der Urlaubspläne",
+          "abwesend_plan": "Plan für „Urlaub weg“",
+          "notify_services": "Benachrichtigungen an"
+        },
+        "data_description": {
+          "boiler_climate": "Die Klimaentität des Kessels. Ihr Raumfühler (current_temperature) ist der Grundwert, ihr Sollwert wird geregelt.",
+          "persons": "Sind alle diese Personen weg, schaltet die Regelung auf Abwesenheit. Leer lassen = keine Anwesenheitslogik.",
+          "label_alltag": "Scheduler-Pläne mit diesem Label laufen im Alltag.",
+          "label_urlaub": "Scheduler-Pläne mit diesem Label laufen bei „Urlaub zuhause“.",
+          "abwesend_plan": "Optional. Läuft bei „Urlaub weg“; sonst gilt die Urlaub-weg-Temperatur.",
+          "notify_services": "Z. B. notify.mobile_app_iphone. Für die Fenster-Erinnerungen."
+        }
+      },
+      "add_room": {
+        "title": "Raum hinzufügen",
+        "sections": {
+          "grund": {
+            "name": "Raum",
+            "data": {
+              "name": "Name",
+              "climate": "Thermostat",
+              "temperature_sensor": "Raumtemperatur-Sensor",
+              "window_sensor": "Fenstersensor",
+              "in_demand": "Zählt zum Heizbedarf",
+              "heimkehr_boost": "Heimkehrtemperatur anwenden",
+              "max_temperature": "Höchsttemperatur"
+            },
+            "data_description": {
+              "climate": "Z. B. die Better-Thermostat-Entität.",
+              "temperature_sensor": "Optional. Sonst die Ist-Temperatur des Thermostats.",
+              "window_sensor": "Optional. Offenes Fenster: Raum zählt nicht zum Heizbedarf.",
+              "in_demand": "Aus: Raum fordert den Kessel nie an (z. B. Flur).",
+              "heimkehr_boost": "Beim Heimkommen mindestens auf die Heimkehrtemperatur stellen.",
+              "max_temperature": "Optional. Höhere Sollwerte werden auf diesen Wert begrenzt."
+            }
+          },
+          "ausnahme": {
+            "name": "Ausnahme bei Abwesenheit",
+            "data": {
+              "away_exception": "Ausnahme aktiv",
+              "away_exception_start": "Beginn",
+              "away_exception_end": "Ende",
+              "away_exception_end_friday": "Ende freitags",
+              "away_exception_temperature": "Temperatur"
+            },
+            "data_description": {
+              "away_exception_end_friday": "Optional, abweichendes Ende am Freitag."
+            },
+            "description": "Z. B. Kinderzimmer: nachmittags warm, auch wenn die Eltern weg sind."
+          },
+          "rhythmus": {
+            "name": "Wiederkehrende Abwesenheit",
+            "data": {
+              "rhythm": "Für diesen Raum anbieten",
+              "rhythm_weekday": "Wochentag des Beginns",
+              "rhythm_start": "Uhrzeit des Beginns",
+              "rhythm_duration_hours": "Dauer",
+              "rhythm_interval_days": "Wiederholung alle",
+              "rhythm_temperature": "Temperatur währenddessen"
+            },
+            "data_description": {
+              "rhythm_duration_hours": "Fr 16:00 bis So 15:00 = 47 h.",
+              "rhythm_interval_days": "14 = jedes 2. Wochenende."
+            },
+            "description": "Z. B. jedes 2. Wochenende beim anderen Elternteil. Schalter und Termine erscheinen als Entitäten."
+          },
+          "erinnerung": {
+            "name": "Fenster-Erinnerung",
+            "data": {
+              "window_reminder": "Erinnerung aktiv",
+              "humidity_sensor": "Feuchtesensor",
+              "reminder_minutes": "Erinnern nach",
+              "reminder_humidity_below": "Feuchte unter"
+            },
+            "data_description": {
+              "humidity_sensor": "Optional. Dann erst erinnern, wenn die Feuchte unter dem Grenzwert liegt."
+            }
+          }
+        }
+      },
+      "edit_room": {
+        "title": "Raum bearbeiten: {name}",
+        "sections": {
+          "grund": {
+            "name": "Raum",
+            "data": {
+              "name": "Name",
+              "climate": "Thermostat",
+              "temperature_sensor": "Raumtemperatur-Sensor",
+              "window_sensor": "Fenstersensor",
+              "in_demand": "Zählt zum Heizbedarf",
+              "heimkehr_boost": "Heimkehrtemperatur anwenden",
+              "max_temperature": "Höchsttemperatur"
+            },
+            "data_description": {
+              "climate": "Z. B. die Better-Thermostat-Entität.",
+              "temperature_sensor": "Optional. Sonst die Ist-Temperatur des Thermostats.",
+              "window_sensor": "Optional. Offenes Fenster: Raum zählt nicht zum Heizbedarf.",
+              "in_demand": "Aus: Raum fordert den Kessel nie an (z. B. Flur).",
+              "heimkehr_boost": "Beim Heimkommen mindestens auf die Heimkehrtemperatur stellen.",
+              "max_temperature": "Optional. Höhere Sollwerte werden auf diesen Wert begrenzt."
+            }
+          },
+          "ausnahme": {
+            "name": "Ausnahme bei Abwesenheit",
+            "data": {
+              "away_exception": "Ausnahme aktiv",
+              "away_exception_start": "Beginn",
+              "away_exception_end": "Ende",
+              "away_exception_end_friday": "Ende freitags",
+              "away_exception_temperature": "Temperatur"
+            },
+            "data_description": {
+              "away_exception_end_friday": "Optional, abweichendes Ende am Freitag."
+            },
+            "description": "Z. B. Kinderzimmer: nachmittags warm, auch wenn die Eltern weg sind."
+          },
+          "rhythmus": {
+            "name": "Wiederkehrende Abwesenheit",
+            "data": {
+              "rhythm": "Für diesen Raum anbieten",
+              "rhythm_weekday": "Wochentag des Beginns",
+              "rhythm_start": "Uhrzeit des Beginns",
+              "rhythm_duration_hours": "Dauer",
+              "rhythm_interval_days": "Wiederholung alle",
+              "rhythm_temperature": "Temperatur währenddessen"
+            },
+            "data_description": {
+              "rhythm_duration_hours": "Fr 16:00 bis So 15:00 = 47 h.",
+              "rhythm_interval_days": "14 = jedes 2. Wochenende."
+            },
+            "description": "Z. B. jedes 2. Wochenende beim anderen Elternteil. Schalter und Termine erscheinen als Entitäten."
+          },
+          "erinnerung": {
+            "name": "Fenster-Erinnerung",
+            "data": {
+              "window_reminder": "Erinnerung aktiv",
+              "humidity_sensor": "Feuchtesensor",
+              "reminder_minutes": "Erinnern nach",
+              "reminder_humidity_below": "Feuchte unter"
+            },
+            "data_description": {
+              "humidity_sensor": "Optional. Dann erst erinnern, wenn die Feuchte unter dem Grenzwert liegt."
+            }
+          }
+        }
+      },
+      "select_room": {
+        "title": "Welchen Raum bearbeiten?",
+        "data": {
+          "room_id": "Raum"
+        }
+      },
+      "remove_room": {
+        "title": "Welchen Raum entfernen?",
+        "data": {
+          "room_id": "Raum"
+        }
+      }
+    },
+    "error": {
+      "exception_times": "Für die Ausnahme bei Abwesenheit brauchst du Beginn und Ende."
+    }
+  }
+}
