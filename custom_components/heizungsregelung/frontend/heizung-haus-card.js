@@ -1,5 +1,5 @@
 /* heizung-haus-card – Hausschnitt-Dashboard der Integration „Heizungsregelung“ */
-const HHC_VERSION = '0.4.0';
+const HHC_VERSION = '0.4.3';
 
 const HHC_ICON = {
   flame: '<path d="M12 3c1 3 4 5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"/>',
@@ -274,6 +274,17 @@ class HeizungHausCard extends HTMLElement {
     const lvl = dhw == null ? 0 : Math.max(0, Math.min(8, Math.round((dhw - 20) / 5)));
     for (let i = 0; i < 8; i++) tank += '<i class="' + (i < lvl ? 'f' : '') + '"></i>';
 
+    // Mischwasser: Wie viel Wasser mit Zieltemperatur ergibt der Speicherinhalt (mit Kaltwasser gemischt)?
+    const vol = Number(b.dhw_volume) || 0;
+    const tCold = b.cold_water != null ? Number(b.cold_water) : 10;
+    const tMix = b.mix_temperature != null ? Number(b.mix_temperature) : 38;
+    let mix = '';
+    if (vol && dhw != null && tMix > tCold) {
+      const liters = dhw > tMix ? vol * (dhw - tCold) / (tMix - tCold) : 0;
+      mix = '<div class="mix"><span class="lbl">BEI ' + hhcFmt(tMix, 0) + ' °C</span>' +
+        '<span class="mid ' + (liters > 0 ? 'o' : 'mut') + '">≈ ' + hhcFmt(Math.round(liters / 5) * 5, 0) + '<small> L</small></span>' +
+        '<span class="sub">' + (liters > 0 ? 'KALT ' + hhcFmt(tCold, 0) + ' °C' : 'ZU KALT') + '</span></div>';
+    }
     const kwh = this._n(b.gas_today_kwh), m3 = this._n(b.gas_today_m3);
     const factor = kwh != null && m3 ? kwh / m3 : (b.gas_kwh_per_m3 || null);
     const hz = this._n(b.gas_heating_m3), ww = this._n(b.gas_dhw_m3);
@@ -294,7 +305,7 @@ class HeizungHausCard extends HTMLElement {
           '<div class="tl" data-more="' + hhcEsc(b.pressure || '') + '"><span>DRUCK</span><b>' + hhcFmt(this._n(b.pressure), 1) + ' bar</b></div>' +
         '</div></div>' +
       (b.dhw ? '<div class="pan cut12 dhw" data-more="' + hhcEsc(b.dhw) + '" role="button" tabindex="0"><div class="tank">' + tank + '</div><div class="col"><span class="lbl">WARMWASSER</span><span class="mid">' + hhcFmt(dhw, 1) + '<small> °C</small></span>' +
-        (b.dhw_volume ? '<span class="sub">SPEICHER ' + hhcEsc(b.dhw_volume) + ' L</span>' : '') + '</div></div>' : '') +
+        (b.dhw_volume ? '<span class="sub">SPEICHER ' + hhcEsc(b.dhw_volume) + ' L</span>' : '') + mix + '</div></div>' : '') +
       (b.gas_today_kwh || b.gas_today_m3 ? '<div class="pan cut12 col" data-more="' + hhcEsc(b.gas_today_kwh || b.gas_today_m3) + '" role="button" tabindex="0"><span class="lbl">GAS HEUTE</span>' +
         '<span class="mid">' + hhcFmt(kwh, 1) + '<small> kWh</small></span>' +
         '<span class="sub">' + hhcFmt(m3, 2) + ' m³</span>' + split +
@@ -539,6 +550,7 @@ aside{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:22px}
 .col{display:flex;flex-direction:column;gap:6px}
 aside .col{gap:14px}
 .dhw{display:flex;gap:14px}
+.mix{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding-top:8px;border-top:1px solid #2A2445;white-space:nowrap}
 .tank{width:26px;display:flex;flex-direction:column-reverse;gap:3px}
 .tank i{flex:1;min-height:6px;background:#2A2445}.tank i.f{background:#FF9F1C;box-shadow:0 0 6px #FF9F1C}
 .sec{display:flex;flex-direction:column;gap:12px}

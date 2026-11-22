@@ -99,6 +99,8 @@ basement:
   pressure: sensor.anlagendruck
   dhw: sensor.warmwasser_temperatur
   dhw_volume: 160
+  mix_temperature: 38      # Anzeige: so viel Wasser mit 38 °C ergibt der Speicherinhalt
+  cold_water: 10           # Kaltwassertemperatur für diese Rechnung
   gas_today_kwh: sensor.gas_energie_heute
   gas_today_m3: sensor.gas_volumen_heute
   gas_yesterday_kwh: sensor.gas_energie_gestern
