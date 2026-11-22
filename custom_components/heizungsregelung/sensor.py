@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -19,6 +19,9 @@ async def async_setup_entry(
     c = entry.runtime_data
     entities: list[SensorEntity] = [BedarfSensor(c), SollwertSensor(c), StatusSensor(c)]
     entities += [RoomDeficitSensor(c, room) for room in c.rooms if not room.manual]
+    for room in c.rooms:
+        if room.room_id in c.learners:
+            entities += [LearnSensor(c, room, kind) for kind in LEARN_KINDS]
     async_add_entities(entities)
 
 
@@ -134,3 +137,45 @@ class RoomDeficitSensor(HeizungEntity, SensorEntity):
             "ist": snap.room_currents.get(self.room.room_id),
             "zaehlt_fuer_bedarf": self.room.in_demand,
         }
+
+
+LEARN_KINDS = {
+    "auskuehlrate": ("Auskühlrate", "cool", "K/h", "mdi:thermometer-chevron-down"),
+    "aufheizrate": ("Aufheizrate", "heat", "K/h", "mdi:thermometer-chevron-up"),
+    "zeit_bis_ziel": ("Zeit bis Zieltemperatur", "eta", UnitOfTime.MINUTES, "mdi:timer-sand"),
+}
+
+
+class LearnSensor(HeizungEntity, SensorEntity):
+    """Ergebnis des lernenden Raummodells."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, c, room, kind: str) -> None:
+        name, key, unit, icon = LEARN_KINDS[kind]
+        super().__init__(c, kind, name, room)
+        self._key = key
+        self._kind = kind
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_suggested_display_precision = 0 if kind == "zeit_bis_ziel" else 2
+        if kind == "zeit_bis_ziel":
+            self._attr_device_class = SensorDeviceClass.DURATION
+
+    @property
+    def _info(self) -> dict[str, Any]:
+        return self.controller.snapshot.learn.get(self.room.room_id, {})
+
+    @property
+    def native_value(self) -> float | None:
+        info = self._info
+        if not info.get("zuverlaessig"):
+            return None
+        return info.get(self._key)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        info = self._info
+        if self._kind != "aufheizrate":
+            return {"lernstand": info.get("lernstand"), "ziel_erreichbar": info.get("ziel_erreichbar")}
+        return {k: v for k, v in info.items() if k not in ("cool", "heat", "eta")}

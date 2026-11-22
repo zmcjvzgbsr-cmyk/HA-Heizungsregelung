@@ -18,9 +18,11 @@ from homeassistant.util import slugify
 from .const import (
     CONF_ABWESEND_PLAN,
     CONF_BOILER,
+    CONF_FLOW_SENSOR,
     CONF_LABEL_ALLTAG,
     CONF_LABEL_URLAUB,
     CONF_NOTIFY,
+    CONF_OUTDOOR,
     CONF_PERSONS,
     CONF_ROOM_CLIMATE,
     CONF_ROOM_EXC_ENABLED,
@@ -33,6 +35,7 @@ from .const import (
     CONF_ROOM_LEVELS,
     CONF_ROOM_RADIATORS,
     CONF_ROOM_TYPE,
+    CONF_ROOM_VALVE,
     ROOM_TYPE_MANUAL,
     ROOM_TYPE_SMART,
     CONF_ROOM_ID,
@@ -59,7 +62,7 @@ from .const import (
 SECTIONS = {
     "grund": [
         CONF_ROOM_NAME, CONF_ROOM_TYPE, CONF_ROOM_CLIMATE, CONF_ROOM_LEVELS, CONF_ROOM_RADIATORS,
-        CONF_ROOM_SENSOR, CONF_ROOM_WINDOW, CONF_ROOM_IN_DEMAND, CONF_ROOM_HEIMKEHR, CONF_ROOM_MAX_TEMP,
+        CONF_ROOM_VALVE, CONF_ROOM_SENSOR, CONF_ROOM_WINDOW, CONF_ROOM_IN_DEMAND, CONF_ROOM_HEIMKEHR, CONF_ROOM_MAX_TEMP,
     ],
     "ausnahme": [
         CONF_ROOM_EXC_ENABLED, CONF_ROOM_EXC_START, CONF_ROOM_EXC_END,
@@ -111,6 +114,12 @@ def _base_schema(hass: HomeAssistant, d: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
             _req(CONF_BOILER, d): selector.EntitySelector(selector.EntitySelectorConfig(domain="climate")),
+            _opt(CONF_OUTDOOR, d): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+            ),
+            _opt(CONF_FLOW_SENSOR, d): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+            ),
             _opt(CONF_PERSONS, d): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="person", multiple=True)
             ),
@@ -144,6 +153,9 @@ def _room_schema(d: dict[str, Any]) -> vol.Schema:
             _opt(CONF_ROOM_CLIMATE, d): selector.EntitySelector(selector.EntitySelectorConfig(domain="climate")),
             _req(CONF_ROOM_LEVELS, d): selector.TextSelector(),
             _opt(CONF_ROOM_RADIATORS, d): selector.TextSelector(),
+            _opt(CONF_ROOM_VALVE, d): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", multiple=True)
+            ),
             _opt(CONF_ROOM_SENSOR, d): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
             ),

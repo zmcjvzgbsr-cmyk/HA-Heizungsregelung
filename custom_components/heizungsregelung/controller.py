@@ -23,16 +23,18 @@ from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from . import logic
+from . import learn, logic
 from .const import (
     BEDARF_CLAMP,
     BEDARF_STABLE_SECONDS,
     BOILER_EVAL_SECONDS,
     CONF_ABWESEND_PLAN,
     CONF_BOILER,
+    CONF_FLOW_SENSOR,
     CONF_LABEL_ALLTAG,
     CONF_LABEL_URLAUB,
     CONF_NOTIFY,
+    CONF_OUTDOOR,
     CONF_PERSONS,
     CONF_ROOM_CLIMATE,
     CONF_ROOM_EXC_ENABLED,
@@ -47,6 +49,7 @@ from .const import (
     CONF_ROOM_LEVELS,
     CONF_ROOM_RADIATORS,
     CONF_ROOM_TYPE,
+    CONF_ROOM_VALVE,
     CONF_ROOM_MAX_TEMP,
     CONF_ROOM_NAME,
     CONF_ROOM_REMIND,
@@ -64,6 +67,7 @@ from .const import (
     DOMAIN,
     GUARD_DELAY_SECONDS,
     HEIMKEHR_SETTLE_SECONDS,
+    LEARN_HISTORY_DAYS,
     LEGACY_AWAY,
     LEGACY_HEIZT,
     LEGACY_PARAM_HELPERS,
@@ -127,6 +131,7 @@ class RoomConfig:
     remind_minutes: float
     remind_humidity: float
     manual: bool = False
+    valve_sensors: list[str] = field(default_factory=list)
     levels: list[str] = field(default_factory=list)
     radiators: str | None = None
 
@@ -160,6 +165,7 @@ class RoomConfig:
             remind_minutes=float(g[CONF_ROOM_REMIND_MINUTES]),
             remind_humidity=float(g[CONF_ROOM_REMIND_HUMIDITY]),
             manual=manual,
+            valve_sensors=[v for v in (g.get(CONF_ROOM_VALVE) or []) if v],
             levels=levels or ["0"],
             radiators=g.get(CONF_ROOM_RADIATORS) or None,
         )
@@ -211,6 +217,7 @@ class Snapshot:
     decision: logic.BoilerDecision | None = None
     room_targets: dict[str, float | None] = field(default_factory=dict)
     room_currents: dict[str, float | None] = field(default_factory=dict)
+    learn: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class Controller:
@@ -240,6 +247,13 @@ class Controller:
         self.away_applied: dict[str, float] = {}
         self.manual_levels: dict[str, str] = {}
         self.snapshot = Snapshot()
+        self.learners: dict[str, learn.RoomLearner] = {
+            r.room_id: learn.RoomLearner() for r in self.rooms if not r.manual
+        }
+        self.learn_bootstrapped = False
+        self._learn_buf: dict[str, deque] = {}
+        self._learn_last_sample: datetime | None = None
+        self._learn_count = 0
         self.log: deque[str] = deque(maxlen=25)
 
         self._last_boiler_eval: datetime | None = None
@@ -281,6 +295,8 @@ class Controller:
             "modus_seit": self.modus_seit.isoformat(),
             "rhythm": {k: v.as_dict() for k, v in self.rhythm.items()},
             "manual_levels": self.manual_levels,
+            "learn": {k: v.as_dict() for k, v in self.learners.items()},
+            "learn_bootstrapped": self.learn_bootstrapped,
         }
 
     async def _call(self, domain: str, service: str, data: dict[str, Any], text: str) -> None:
@@ -350,6 +366,10 @@ class Controller:
         if d.get("modus_seit"):
             self.modus_seit = dt_util.parse_datetime(d["modus_seit"]) or dt_util.utcnow()
         self.manual_levels.update({k: str(v) for k, v in (d.get("manual_levels") or {}).items()})
+        for k, v in (d.get("learn") or {}).items():
+            if k in self.learners:
+                self.learners[k] = learn.RoomLearner(v)
+        self.learn_bootstrapped = bool(d.get("learn_bootstrapped"))
         for k, v in (d.get("rhythm") or {}).items():
             self.rhythm[k] = RhythmState.from_dict(v)
 
@@ -385,6 +405,8 @@ class Controller:
         elif home is False and not self.away:
             self._start_away_timer()
         await self.async_tick()
+        if not self.learn_bootstrapped and self.learners and self.conf.get(CONF_OUTDOOR):
+            self.hass.async_create_background_task(self._learn_bootstrap(), f"{DOMAIN}_learn_bootstrap")
 
     # ------------------------------------------------------------------ Taktgeber
     @callback
@@ -399,6 +421,7 @@ class Controller:
             self._compute_bedarf()
             await self._maybe_eval_boiler()
             await self._check_reminders()
+            self._learn_step()
         self._signal()
 
     # ------------------------------------------------------------------ Heizbedarf
@@ -889,6 +912,180 @@ class Controller:
                     f"Erinnerung {room.name} an {svc}",
                 )
 
+    # ------------------------------------------------------------------ Lernmodell
+    def _num_state(self, entity_id: str | None) -> float | None:
+        if not entity_id:
+            return None
+        s = self.hass.states.get(entity_id)
+        return _float(s.state) if s is not None and s.state not in _BAD else None
+
+    def _boiler_on(self) -> bool:
+        s = self.hass.states.get(self.boiler)
+        if s is not None and s.attributes.get("hvac_action") is not None:
+            return s.attributes.get("hvac_action") == "heating"
+        return self.heizt
+
+    def _room_u(self, room: RoomConfig) -> float | None:
+        vals = [v for v in (self._num_state(x) for x in room.valve_sensors) if v is not None]
+        if vals:
+            return max(0.0, min(1.0, sum(vals) / len(vals) / 100.0))
+        if room.valve_sensors:
+            return None
+        c = self.hass.states.get(room.climate) if room.climate else None
+        if c is None or c.state in _BAD:
+            return None
+        return 1.0 if c.attributes.get("hvac_action") == "heating" else 0.0
+
+    def _window_blocked(self, room: RoomConfig) -> bool:
+        if not room.window_sensor:
+            return False
+        w = self.hass.states.get(room.window_sensor)
+        if w is not None and w.state == STATE_ON:
+            return True
+        closed = self.window_closed_at.get(room.room_id)
+        return closed is not None and (dt_util.utcnow() - closed).total_seconds() < self.params["lueften_nachlauf"] * 60
+
+    def _learn_step(self) -> None:
+        """Einmal pro Minute messen, alle 10 Minuten ein 30-Minuten-Fenster lernen."""
+        if not self.learners:
+            return
+        now = dt_util.utcnow()
+        if self._learn_last_sample and (now - self._learn_last_sample).total_seconds() < 55:
+            self._update_learn_snapshot()
+            return
+        self._learn_last_sample = now
+        tout = self._num_state(self.conf.get(CONF_OUTDOOR))
+        vl = self._num_state(self.conf.get(CONF_FLOW_SENSOR))
+        boiler_on = self._boiler_on()
+        self._learn_count += 1
+        learn_now = self._learn_count % learn.STEP_MIN == 0
+        changed = False
+        for room in self.rooms:
+            lr = self.learners.get(room.room_id)
+            if lr is None:
+                continue
+            buf = self._learn_buf.setdefault(room.room_id, deque(maxlen=learn.WINDOW_MIN + 1))
+            buf.append(
+                learn.Sample(
+                    tin=self._room_current(room),
+                    tout=tout,
+                    u=self._room_u(room),
+                    vl=vl,
+                    boiler_on=boiler_on,
+                    window_open=self._window_blocked(room),
+                )
+            )
+            lr.note_vl(vl, boiler_on)
+            if learn_now and len(buf) == buf.maxlen:
+                f = learn.window_features(list(buf))
+                if f is not None:
+                    lr.update(*f)
+                    changed = True
+        if changed:
+            self._save()
+        self._update_learn_snapshot()
+
+    def _update_learn_snapshot(self) -> None:
+        tout = self._num_state(self.conf.get(CONF_OUTDOOR))
+        vl_id = self.conf.get(CONF_FLOW_SENSOR)
+        vl_now = self._num_state(vl_id) if self._boiler_on() else None
+        out: dict[str, dict[str, Any]] = {}
+        for room in self.rooms:
+            lr = self.learners.get(room.room_id)
+            if lr is None:
+                continue
+            tin = self.snapshot.room_currents.get(room.room_id)
+            target = self.snapshot.room_targets.get(room.room_id)
+            info: dict[str, Any] = {
+                "lernstand": lr.progress,
+                "zuverlaessig": lr.reliable,
+                "fenster_gelernt": lr.n,
+                "waermeverlust_1_h": round(lr.a, 4),
+                "zeitkonstante_h": round(1 / lr.a, 1) if lr.a > 0 else None,
+                "heizwirkung_1_h": round(lr.b, 4),
+                "sonstige_gewinne_k_h": round(lr.c, 2),
+                "modellfehler_k_h": round(lr.rmse, 2),
+                "vorlauf_beim_heizen": round(lr.vl_heat, 1),
+                "cool": None,
+                "heat": None,
+                "eta": None,
+            }
+            if tin is not None and tout is not None:
+                has_vl = bool(vl_id)
+                info["cool"] = round(lr.cool_rate(tin, tout), 2)
+                info["heat"] = round(lr.heat_rate(tin, tout, vl_now, has_vl), 2)
+                if target is not None:
+                    eta = lr.minutes_to_target(tin, target, tout, vl_now, has_vl)
+                    info["eta"] = None if eta is None else round(eta)
+                    info["ziel_erreichbar"] = eta is not None
+            out[room.room_id] = info
+        self.snapshot.learn = out
+
+    async def _learn_bootstrap(self) -> None:
+        """Modelle einmalig aus dem Verlauf der letzten Tage anlernen."""
+        try:
+            from homeassistant.components.recorder import get_instance, history
+        except ImportError:
+            return
+        try:
+            instance = get_instance(self.hass)
+        except KeyError:
+            self._note("Lernmodell: Recorder nicht verfügbar, lerne ab jetzt")
+            return
+        end = dt_util.utcnow()
+        start = end - timedelta(days=LEARN_HISTORY_DAYS)
+        ids: set[str] = {self.boiler}
+        for k in (CONF_OUTDOOR, CONF_FLOW_SENSOR):
+            if self.conf.get(k):
+                ids.add(self.conf[k])
+        for room in self.rooms:
+            if room.room_id not in self.learners:
+                continue
+            ids.update(x for x in (room.temperature_sensor, room.climate, room.window_sensor) if x)
+            ids.update(room.valve_sensors)
+        try:
+            states = await instance.async_add_executor_job(
+                history.get_significant_states, self.hass, start, end, sorted(ids), None, True, False, False, False
+            )
+        except Exception as err:  # noqa: BLE001
+            self._note(f"Lernmodell: Verlauf nicht lesbar ({err})")
+            return
+        nachlauf = int(self.params["lueften_nachlauf"])
+        series = learn_series_from_history(states, start, end)
+        rooms = [r for r in self.rooms if r.room_id in self.learners]
+
+        def _work() -> dict[str, int]:
+            used: dict[str, int] = {}
+            for room in rooms:
+                samples = build_samples(
+                    series, room, self.boiler, self.conf.get(CONF_OUTDOOR), self.conf.get(CONF_FLOW_SENSOR), nachlauf
+                )
+                fresh = learn.RoomLearner()
+                used[room.room_id] = fresh.learn_series(samples)
+                if used[room.room_id]:
+                    self.learners[room.room_id] = fresh
+            return used
+
+        used = await self.hass.async_add_executor_job(_work)
+        async with self._lock:
+            self.learn_bootstrapped = True
+            self._save()
+            self._update_learn_snapshot()
+        self._note(
+            "Lernmodell aus 7 Tagen Verlauf: "
+            + ", ".join(f"{r.name} {used.get(r.room_id, 0)}" for r in rooms)
+            + " Fenster"
+        )
+        self._signal()
+
+    async def async_relearn(self) -> None:
+        """Modelle verwerfen und neu aus dem Verlauf lernen."""
+        for k in list(self.learners):
+            self.learners[k] = learn.RoomLearner()
+        self.learn_bootstrapped = False
+        self._save()
+        await self._learn_bootstrap()
+
     # ------------------------------------------------------------------ Handthermostate
     def manual_level(self, room: RoomConfig) -> str:
         level = self.manual_levels.get(room.room_id)
@@ -909,3 +1106,76 @@ class Controller:
         if self.mode == MODE_URLAUB_WEG:
             return "Urlaub weg"
         return f"{MODE_LABELS[self.mode]} – {'alle weg' if self.away else 'zuhause'}"
+
+
+# ---------------------------------------------------------------------- Verlauf -> Minutenreihen
+def learn_series_from_history(states: dict[str, list], start: datetime, end: datetime) -> dict[str, Any]:
+    """Zustände je Entität als (Minute, Zustand, Attribute)-Liste, vorwärts aufgefüllt."""
+    minutes = int((end - start).total_seconds() // 60)
+    out: dict[str, Any] = {"_minutes": minutes}
+    for entity_id, rows in states.items():
+        grid: list[tuple[str | None, dict]] = [(None, {})] * minutes
+        events = []
+        for st in rows:
+            ts = getattr(st, "last_updated", None) or getattr(st, "last_changed", None)
+            if ts is None:
+                continue
+            idx = int((ts - start).total_seconds() // 60)
+            events.append((max(0, idx), st.state, dict(getattr(st, "attributes", {}) or {})))
+        events.sort(key=lambda e: e[0])
+        cur: tuple[str | None, dict] = (None, {})
+        j = 0
+        for m in range(minutes):
+            while j < len(events) and events[j][0] <= m:
+                cur = (events[j][1], events[j][2])
+                j += 1
+            grid[m] = cur
+        out[entity_id] = grid
+    return out
+
+
+def build_samples(
+    series: dict[str, Any], room: RoomConfig, boiler: str, outdoor: str | None, flow: str | None, nachlauf_min: int
+) -> list[learn.Sample]:
+    """Minutenreihe eines Raums aus den aufbereiteten Verläufen."""
+    minutes = series["_minutes"]
+    none_grid = [(None, {})] * minutes
+
+    def num(grid, m):
+        v = grid[m][0]
+        return None if v in _BAD else _float(v)
+
+    tin_g = series.get(room.temperature_sensor) if room.temperature_sensor else None
+    cl_g = series.get(room.climate, none_grid) if room.climate else none_grid
+    out_g = series.get(outdoor, none_grid) if outdoor else none_grid
+    vl_g = series.get(flow) if flow else None
+    b_g = series.get(boiler, none_grid)
+    w_g = series.get(room.window_sensor) if room.window_sensor else None
+    v_gs = [series.get(v, none_grid) for v in room.valve_sensors]
+    samples: list[learn.Sample] = []
+    last_open = -10**9
+    for m in range(minutes):
+        tin = num(tin_g, m) if tin_g is not None else None
+        if tin is None:
+            tin = _float(cl_g[m][1].get("current_temperature"))
+        if v_gs:
+            vals = [x for x in (num(g, m) for g in v_gs) if x is not None]
+            u = max(0.0, min(1.0, sum(vals) / len(vals) / 100.0)) if vals else None
+        else:
+            st, at = cl_g[m]
+            u = None if st in _BAD else (1.0 if at.get("hvac_action") == "heating" else 0.0)
+        b_state, b_attr = b_g[m]
+        boiler_on = b_attr.get("hvac_action") == "heating"
+        if w_g is not None and w_g[m][0] == STATE_ON:
+            last_open = m
+        samples.append(
+            learn.Sample(
+                tin=tin,
+                tout=num(out_g, m),
+                u=u,
+                vl=num(vl_g, m) if vl_g is not None else None,
+                boiler_on=boiler_on,
+                window_open=(m - last_open) <= nachlauf_min,
+            )
+        )
+    return samples

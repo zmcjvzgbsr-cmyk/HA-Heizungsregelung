@@ -8,6 +8,7 @@ PLATFORMS = ["binary_sensor", "datetime", "number", "select", "sensor", "switch"
 # --- Grundeinstellungen (config entry data/options) ---
 CONF_BOILER = "boiler_climate"
 CONF_OUTDOOR = "outdoor_sensor"
+CONF_FLOW_SENSOR = "flow_sensor"
 CONF_PERSONS = "persons"
 CONF_LABEL_ALLTAG = "label_alltag"
 CONF_LABEL_URLAUB = "label_urlaub"
@@ -90,6 +91,7 @@ WEEKDAY_LABELS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Sa
 
 CONF_ROOM_HEIMKEHR = "heimkehr_boost"
 CONF_ROOM_TYPE = "thermostat_type"
+CONF_ROOM_VALVE = "valve_sensors"
 CONF_ROOM_LEVELS = "manual_levels"
 CONF_ROOM_RADIATORS = "radiators"
 ROOM_TYPE_SMART = "smart"
@@ -136,3 +138,5 @@ LEGACY_URLAUB_WEG = "input_boolean.urlaub_abwesend"
 STORAGE_VERSION = 1
 
 SIGNAL_UPDATE = f"{DOMAIN}_update_{{}}"
+
+LEARN_HISTORY_DAYS = 7

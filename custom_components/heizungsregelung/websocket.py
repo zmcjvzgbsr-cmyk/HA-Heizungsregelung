@@ -27,6 +27,7 @@ def _room_dict(room: Any) -> dict[str, Any]:
         "thermostat_type": "manual" if d["manual"] else "smart",
         "levels": d["levels"],
         "radiators": d["radiators"],
+        "valve_sensors": d["valve_sensors"],
         "name": d["name"],
         "climate": d["climate"],
         "temperature_sensor": d["temperature_sensor"],

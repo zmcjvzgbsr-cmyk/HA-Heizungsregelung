@@ -26,6 +26,7 @@ def _states(hass: HomeAssistant) -> None:
     hass.states.async_set("sensor.t_vincent", "18.2", {"device_class": "temperature"})
     hass.states.async_set("binary_sensor.f_vincent", "off")
     hass.states.async_set("person.paul", "home")
+    hass.states.async_set("sensor.aussen", "5.0", {"device_class": "temperature"})
     hass.states.async_set("person.susi", "home")
     hass.states.async_set("input_number.heizung_schub_faktor", "1.5")
 
@@ -41,6 +42,7 @@ async def test_flow_setup_rooms_and_tick(hass: HomeAssistant, hass_ws_client) ->
         result["flow_id"],
         {
             "boiler_climate": "climate.remeha",
+            "outdoor_sensor": "sensor.aussen",
             "persons": ["person.paul", "person.susi"],
             "label_alltag": "heizplan_alltag",
             "notify_services": ["notify.handy"],
@@ -89,6 +91,8 @@ async def test_flow_setup_rooms_and_tick(hass: HomeAssistant, hass_ws_client) ->
     assert "select.heizungsregelung_betriebsart" in ents
     assert "sensor.heizungsregelung_heizbedarf" in ents
     assert any(e.startswith("datetime.heizung_vincent_abwesend") for e in ents)
+    for kind in ("auskuhlrate", "aufheizrate", "zeit_bis_zieltemperatur"):
+        assert f"sensor.heizung_vincent_{kind}" in ents, sorted(ents)
 
     # Datenabfrage der Dashboard-Karte
     client = await hass_ws_client(hass)

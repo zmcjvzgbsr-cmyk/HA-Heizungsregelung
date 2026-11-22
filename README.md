@@ -23,6 +23,13 @@ Eigene Integration, die einen modulierenden Gaskessel nach dem tatsächlichen W�
 **Wiederkehrende Abwesenheit je Raum**
 - Schalter *Jedes 2. Wochenende weg* plus *Abwesend von/bis*. Der Raum hält dann die eingestellte Temperatur; ein Wächter stellt sie zurück, falls ein Plan dazwischenfunkt, und merkt sich den Planwert. Am Ende wird der Planwert wiederhergestellt und der Termin um das Intervall weitergeschoben.
 
+**Lernendes Raummodell**
+- Für jeden Raum mit smartem Thermostat lernt die Integration laufend, wie schnell er auskühlt (Wärmeverlust, abhängig von der Außentemperatur) und wie schnell er bei offenem Ventil warm wird (abhängig von der Vorlauftemperatur). Grundlage sind Raumtemperatur, Außentemperatur, Ventilstellung und Vorlauf; offene Fenster werden ausgeblendet.
+- Beim ersten Start lernt das Modell aus den letzten 7 Tagen im Verlauf (Recorder), danach alle 10 Minuten weiter.
+- Sensoren je Raum: *Auskühlrate* (K/h), *Aufheizrate* (K/h, bei voll offenem Ventil) und *Zeit bis Zieltemperatur* (min). Sie bleiben leer, bis das Modell sicher genug ist; das Attribut `lernstand` zeigt den Fortschritt, die Aufheizrate zusätzlich Zeitkonstante, Wärmeverlust und Modellfehler.
+- In Stufe 1 schaltet das Modell nichts – es zeigt nur, was es gelernt hat.
+- Voraussetzung: Außentemperatur in den Grundeinstellungen; Vorlauffühler und Ventilsensoren je Raum verbessern das Ergebnis.
+
 **Handthermostate**
 - Thermostat-Typ je Raum: *Smartes Thermostat* (wird geregelt) oder *Handthermostat*. Für Handthermostate legt die Integration die Auswahl *Thermostat-Stufe* an (Standard: 0, ❄, 2, 3, 4, 5, je Raum anpassbar) und merkt sich die Einstellung; der Raum zählt nicht zum Heizbedarf. Heizkörper (Typ, Größe) lassen sich je Raum hinterlegen. In der Karte erscheinen die Stufen zum Antippen.
 

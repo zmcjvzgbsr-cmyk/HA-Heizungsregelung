@@ -1,5 +1,5 @@
 /* heizung-haus-card – Hausschnitt-Dashboard der Integration „Heizungsregelung“ */
-const HHC_VERSION = '0.3.0';
+const HHC_VERSION = '0.4.0';
 
 const HHC_ICON = {
   flame: '<path d="M12 3c1 3 4 5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"/>',
@@ -173,7 +173,8 @@ class HeizungHausCard extends HTMLElement {
     const soll = cst && !off ? hhcNum(cst.attributes.temperature) : null;
     const hasTrv = !!cst;
     const heating = cst && cst.attributes.hvac_action === 'heating';
-    const valves = [].concat(cfg.valve || []).map((v) => this._n(v)).filter((v) => v != null);
+    const valveIds = cfg.valve ? [].concat(cfg.valve) : ((r && r.valve_sensors) || []);
+    const valves = valveIds.map((v) => this._n(v)).filter((v) => v != null);
     const valve = valves.length ? Math.max.apply(null, valves) : null;
 
     const out = {
@@ -205,6 +206,23 @@ class HeizungHausCard extends HTMLElement {
         out.manual = { id, levels: r.levels || [], cur: this._st(id) };
         out.more = tempId || id;
         if (r.radiators) out.notes.push({ c: '', t: String(r.radiators).toUpperCase() });
+      }
+      const heatId = this._e(r.room_id + '_aufheizrate');
+      if (heatId && !away && !off) {
+        const hs = this._s(heatId);
+        const lern = hs ? hs.attributes.lernstand : null;
+        if (!hs || hs.state === 'unknown' || hs.state === 'unavailable') {
+          if (lern != null) out.notes.push({ c: '', t: 'MODELL LERNT · ' + hhcFmt(lern, 0) + ' %' });
+        } else if (out.cls === 'cold') {
+          const eta = this._st(this._e(r.room_id + '_zeit_bis_ziel'));
+          const reach = this._attr(this._e(r.room_id + '_zeit_bis_ziel'), 'ziel_erreichbar');
+          out.notes.push(reach === false
+            ? { c: 'warn', t: 'ZIEL BEI VOLLER LEISTUNG NICHT ERREICHBAR' }
+            : { c: 'cy', t: '↗ ' + hhcFmt(hhcNum(hs.state), 1) + ' K/H · ZIEL IN ' + hhcFmt(hhcNum(eta), 0) + ' MIN' });
+        } else {
+          const cool = this._n(this._e(r.room_id + '_auskuehlrate'));
+          if (cool != null) out.notes.push({ c: '', t: '↘ AUSKÜHLUNG ' + hhcFmt(cool, 1) + ' K/H' });
+        }
       }
       const lead = this._attr(this._e('heizbedarf'), 'fuehrender_raum');
       const bedarf = this._n(this._e('heizbedarf'));
@@ -494,7 +512,7 @@ aside{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:22px}
 .lv button.sel.z{background:#ECEAF7;border-color:#ECEAF7;color:#07060D}
 .vl{display:flex;gap:6px;justify-content:space-between;font-family:"Share Tech Mono",monospace;font-size:11px;color:#A39FC2;margin-top:-4px}
 .note{display:flex;align-items:center;gap:4px;font-family:"Share Tech Mono",monospace;font-size:11px;line-height:1.35;color:#A39FC2}
-.note.mag{color:#FF3DCB}.note.ora{color:#FF9F1C}.note.warn{color:#FCEE0A}
+.note.cy{color:#00E5FF}.note.mag{color:#FF3DCB}.note.ora{color:#FF9F1C}.note.warn{color:#FCEE0A}
 .kgrid{display:flex;flex-wrap:wrap;gap:8px}
 .boiler{flex:2 1 300px;background:rgba(255,159,28,.06);border:1px solid #FF9F1C;box-shadow:inset 0 0 22px rgba(255,159,28,.18);padding:16px;display:flex;flex-direction:column;gap:14px}
 .bh{display:flex;justify-content:space-between;align-items:center;gap:8px}
