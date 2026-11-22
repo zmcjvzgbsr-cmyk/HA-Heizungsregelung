@@ -32,5 +32,5 @@ jobs:
         timeout-minutes: 10
         run: |
           set -o pipefail
-          pytest -q -s --timeout=180 tests 2>&1 | tee out.txt || { python3 -c "t=open('out.txt').read()[-7000:]; print('::error title=pytest::' + t.replace('%','%25').replace('\r','').replace('\n','%0A'))"; exit 1; }
+          pytest -q -s --tb=short --show-capture=no -p no:logging --timeout=180 tests 2>&1 | tee out.txt || { python3 -c "t=open('out.txt').read()[-7000:]; print('::error title=pytest::' + t.replace('%','%25').replace('\r','').replace('\n','%0A'))"; exit 1; }
           python3 -c "t=[l for l in open('out.txt') if l.startswith('ENTITIES')]; print('::notice title=entities::' + ''.join(t)[:3000].replace('\n','%0A'))"
