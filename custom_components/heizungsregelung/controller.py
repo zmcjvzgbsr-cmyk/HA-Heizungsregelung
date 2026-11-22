@@ -428,7 +428,10 @@ class Controller:
     # ------------------------------------------------------------------ Kessel
     async def _maybe_eval_boiler(self) -> None:
         bedarf = self.snapshot.bedarf
-        if bedarf is None:
+        if bedarf is None or bedarf.leading_room is None:
+            # Kein Raum liefert Werte (noch keine Räume, Sensoren nicht verfügbar,
+            # alle Fenster offen): Zustand halten, wie die alte Automation bei
+            # einem unbekannten Heizbedarf.
             return
         now = dt_util.utcnow()
         if bedarf.value != self._bedarf_cand:
