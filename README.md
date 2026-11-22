@@ -53,6 +53,52 @@ Voraussetzung: Home Assistant 2025.2 oder neuer. Für die Betriebsarten wird die
 | je Raum `sensor.heizung_<raum>_unterdeckung` | Ziel − Ist |
 | je Rhythmus-Raum `switch`, `datetime` von/bis, `binary_sensor` *Gerade abwesend* | wiederkehrende Abwesenheit |
 
+## Dashboard: Hausschnitt-Karte
+
+Die Integration bringt die Karte `custom:heizung-haus-card` mit und lädt sie automatisch, eine Ressource muss nicht eingetragen werden (nach dem ersten Update einmal die App bzw. den Browser-Cache neu laden). Die Karte zeigt einen Hausschnitt mit allen Geschossen, den Kessel im Keller, Betriebsart, Anwesenheit, die Rhythmus-Abwesenheiten, den Schalter „Eingriffe aktiv“ und das Protokoll. Räume der Integration werden über ihre `room`-ID verknüpft; Räume ohne Thermostat lassen sich mit Name, optionalem Temperatursensor und Notiz ergänzen.
+
+Empfohlen als eigenes Dashboard mit einer Ansicht vom Typ **Panel**:
+
+```yaml
+type: custom:heizung-haus-card
+title: HAUS HEIZUNG
+outdoor: sensor.aussentemperatur
+roof_note: Dach · 12–16 cm gedämmt
+tolerance: 0.5            # ± K, in denen ein Raum als „passt“ gilt
+floors:
+  - short: DG
+    name: Dachgeschoss
+    rooms:
+      - room: fabienne                     # room_id aus der Integration
+        valve: [sensor.ventil_bett, sensor.ventil_schreibtisch]
+        grow: 1.3                          # relative Breite
+      - name: Arbeitszimmer
+        note: kein Thermostat
+  - short: EG
+    name: Erdgeschoss
+    rooms:
+      - room: wohnzimmer
+        valve: sensor.wohnzimmer_ventilstellung
+      - name: Flur EG
+        temperature: sensor.flur_temperatur
+basement:
+  name: Keller · unbeheizt
+  boiler_name: Remeha Tzerra Ace
+  flow: sensor.vorlauf
+  return: sensor.ruecklauf
+  pressure: sensor.anlagendruck
+  dhw: sensor.warmwasser_temperatur
+  dhw_volume: 160
+  gas_today_kwh: sensor.gas_energie_heute
+  gas_today_m3: sensor.gas_volumen_heute
+  gas_yesterday_kwh: sensor.gas_energie_gestern
+  gas_yesterday_m3: sensor.gas_volumen_gestern
+  gas_heating_m3: sensor.gas_heute_heizung     # Aufteilung, wird in kWh umgerechnet
+  gas_dhw_m3: sensor.gas_heute_warmwasser
+```
+
+Farben: Cyan ⬇️ = zu kalt, Häkchen = passt, Orange ⬆️ = zu warm bzw. heizt, Magenta = Rhythmus-Abwesenheit. Antippen öffnet das Detailfenster der jeweiligen Entität.
+
 ## Umstieg von bestehenden Automationen
 
 Beim allerersten Start übernimmt die Integration – falls vorhanden – die Werte dieser Helfer: `input_number.heizung_schub_faktor`, `…_schub_maximum`, `…_kessel_ruhe_sollwert`, `…_kessel_start_schwelle`, `…_kessel_stopp_schwelle`, `…_kessel_mindestpause`, `…_luften_schub_grenze`, `…_abwesenheit_temperatur`, `…_heimkehr_temperatur` sowie `input_boolean.heizung_kessel_heizt`, `…_heizung_abwesenheit`, `…_urlaub_zuhause`, `…_urlaub_abwesend`.

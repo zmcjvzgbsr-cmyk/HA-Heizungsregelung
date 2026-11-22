@@ -30,7 +30,7 @@ def _states(hass: HomeAssistant) -> None:
     hass.states.async_set("input_number.heizung_schub_faktor", "1.5")
 
 
-async def test_flow_setup_rooms_and_tick(hass: HomeAssistant) -> None:
+async def test_flow_setup_rooms_and_tick(hass: HomeAssistant, hass_ws_client) -> None:
     _states(hass)
     calls = async_mock_service(hass, "climate", "set_temperature")
     lr.async_get(hass).async_create("heizplan_alltag")
@@ -89,6 +89,18 @@ async def test_flow_setup_rooms_and_tick(hass: HomeAssistant) -> None:
     assert "select.heizungsregelung_betriebsart" in ents
     assert "sensor.heizungsregelung_heizbedarf" in ents
     assert any(e.startswith("datetime.heizung_vincent_abwesend") for e in ents)
+
+    # Datenabfrage der Dashboard-Karte
+    client = await hass_ws_client(hass)
+    await client.send_json({"id": 1, "type": "heizungsregelung/card_config"})
+    msg = await client.receive_json()
+    assert msg["success"], msg
+    res = msg["result"]
+    assert res["boiler"] == "climate.remeha"
+    assert res["rooms"][0]["room_id"] == "vincent" and res["rooms"][0]["away_exception_start"] == "13:00:00"
+    assert res["entities"]["vincent_gerade_abwesend"].startswith("binary_sensor.")
+    assert res["entities"]["param_abwesend_temp"].startswith("number.")
+    assert res["entities"]["betriebsart"] == "select.heizungsregelung_betriebsart"
 
     # Takt laufen lassen
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=6))
