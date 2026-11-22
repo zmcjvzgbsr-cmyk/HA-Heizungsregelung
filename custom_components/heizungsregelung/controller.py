@@ -1059,10 +1059,11 @@ class Controller:
             self._note(f"Lernmodell: Verlauf nicht lesbar ({err})")
             return
         nachlauf = int(self.params["lueften_nachlauf"])
-        series = learn_series_from_history(states, start, end)
         rooms = [r for r in self.rooms if r.room_id in self.learners]
 
         def _work() -> dict[str, int]:
+            # Alles Rechenintensive im Hintergrund-Thread, nicht in der Ereignisschleife
+            series = learn_series_from_history(states, start, end)
             used: dict[str, int] = {}
             for room in rooms:
                 samples = build_samples(
@@ -1129,7 +1130,8 @@ def learn_series_from_history(states: dict[str, list], start: datetime, end: dat
             if ts is None:
                 continue
             idx = int((ts - start).total_seconds() // 60)
-            events.append((max(0, idx), st.state, dict(getattr(st, "attributes", {}) or {})))
+            attrs = getattr(st, "attributes", None) or {}
+            events.append((max(0, idx), st.state, {"hvac_action": attrs.get("hvac_action"), "current_temperature": attrs.get("current_temperature")}))
         events.sort(key=lambda e: e[0])
         cur: tuple[str | None, dict] = (None, {})
         j = 0
