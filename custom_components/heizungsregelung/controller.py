@@ -407,11 +407,11 @@ class Controller:
             s = self.hass.states.get(room.temperature_sensor)
             if s is not None and s.state not in _BAD:
                 return _float(s.state)
-        c = self.hass.states.get(room.climate)
+        c = (self.hass.states.get(room.climate) if room.climate else None)
         return _float(c.attributes.get("current_temperature")) if c else None
 
     def _room_target(self, room: RoomConfig) -> float | None:
-        c = self.hass.states.get(room.climate)
+        c = (self.hass.states.get(room.climate) if room.climate else None)
         return _float(c.attributes.get("temperature")) if c else None
 
     def _compute_bedarf(self) -> None:
@@ -419,7 +419,7 @@ class Controller:
         inputs = []
         snap = self.snapshot
         for room in self.rooms:
-            c = self.hass.states.get(room.climate)
+            c = (self.hass.states.get(room.climate) if room.climate else None)
             target = self._room_target(room)
             current = self._room_current(room)
             snap.room_targets[room.room_id] = target
