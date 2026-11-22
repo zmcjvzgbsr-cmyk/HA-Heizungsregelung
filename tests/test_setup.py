@@ -158,7 +158,7 @@ async def test_flow_setup_rooms_and_tick(hass: HomeAssistant, hass_ws_client) ->
         },
     )
     assert result["type"] == "form" and result["errors"] == {"base": "climate_required"}, result
-    await hass.config_entries.options.async_abort(result["flow_id"]) if hasattr(hass.config_entries.options, "async_abort") else None
+    hass.config_entries.options.async_abort(result["flow_id"])
 
     # Entladen
     assert await hass.config_entries.async_unload(entry.entry_id)
