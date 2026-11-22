@@ -25,7 +25,7 @@ Eigene Integration, die einen modulierenden Gaskessel nach dem tatsächlichen W�
 
 **Lernendes Raummodell**
 - Für jeden Raum mit smartem Thermostat lernt die Integration laufend, wie schnell er auskühlt (Wärmeverlust, abhängig von der Außentemperatur) und wie schnell er bei offenem Ventil warm wird (abhängig von der Vorlauftemperatur). Grundlage sind Raumtemperatur, Außentemperatur, Ventilstellung und Vorlauf; offene Fenster werden ausgeblendet.
-- Beim ersten Start lernt das Modell aus den letzten 7 Tagen im Verlauf (Recorder), danach alle 10 Minuten weiter.
+- Beim ersten Start lernt das Modell aus den letzten 7 Tagen im Verlauf (Recorder), danach alle 15 Minuten weiter – aus 60-Minuten-Fenstern, bei groben Sensoren (0,5-K-Schritte) aus 120-Minuten-Fenstern. Die Trägheit des Heizkörpers (≈ 20 min) ist berücksichtigt, Ausreißer wie Baden oder offene Türen werden gedämpft.
 - Sensoren je Raum: *Auskühlrate* (K/h), *Aufheizrate* (K/h, bei voll offenem Ventil) und *Zeit bis Zieltemperatur* (min). Sie bleiben leer, bis das Modell sicher genug ist; das Attribut `lernstand` zeigt den Fortschritt, die Aufheizrate zusätzlich Zeitkonstante, Wärmeverlust und Modellfehler.
 - In Stufe 1 schaltet das Modell nichts – es zeigt nur, was es gelernt hat.
 - Voraussetzung: Außentemperatur in den Grundeinstellungen; Vorlauffühler und Ventilsensoren je Raum verbessern das Ergebnis.

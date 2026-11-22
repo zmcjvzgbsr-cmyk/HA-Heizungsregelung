@@ -2,16 +2,17 @@
 
 Modell je Raum (Temperaturänderung in K/h):
 
-    dT/dt = -a · (T_innen - T_außen) + b · u · Antrieb + c
+    dT/dt = -a · (T_innen - T_außen) + b · H + c
 
 - a: Wärmeverlust (1/h); 1/a ist die Zeitkonstante des Raums in Stunden
 - b: Heizwirkung je Kelvin Antrieb bei voll offenem Ventil (1/h)
-- c: sonstige Gewinne/Verluste (Sonne, Personen, Nachbarräume) in K/h
-- u: Ventilöffnung 0..1 (oder 0/1, wenn nur „heizt“ bekannt ist)
-- Antrieb: Vorlauf - Raumtemperatur (K); ohne Vorlauffühler 30 K, solange der Kessel heizt
+- c: sonstige Gewinne/Verluste (Sonne, Personen, Nachbarräume) in K/h, eng begrenzt
+- H: wirksame Heizung = Ventilöffnung · (Vorlauf - Raum), verzögert um die Trägheit des
+  Heizkörpers (Zeitkonstante HEAT_LAG_MIN); ohne Vorlauffühler 30 K, solange der Kessel heizt
 
-Geschätzt wird mit rekursiven kleinsten Quadraten (RLS) mit Vergessensfaktor,
-aus 30-Minuten-Fenstern, die alle 10 Minuten gebildet werden.
+Geschätzt wird mit rekursiven kleinsten Quadraten (RLS) mit Vergessensfaktor aus
+60-Minuten-Fenstern (bei groben Sensoren mit 0,5-K-Schritten 120 Minuten), die alle
+15 Minuten gebildet werden. Ausreißer (Baden, offene Türen) werden gedämpft.
 """
 
 from __future__ import annotations
@@ -20,16 +21,21 @@ from dataclasses import dataclass
 import math
 from typing import Any
 
-WINDOW_MIN = 30
-STEP_MIN = 10
-LAMBDA = 0.998  # wirksames Gedächtnis ~ 500 Fenster ≈ 3,5 Tage
+MODEL_VERSION = 2
+WINDOW_MIN = 60
+WINDOW_COARSE_MIN = 120
+STEP_MIN = 15
+HEAT_LAG_MIN = 20.0
+LAMBDA = 0.997  # wirksames Gedächtnis ~ 330 Fenster ≈ 3,5 Tage
 DEFAULT_DRIVE = 30.0
 DEFAULT_VL_HEAT = 45.0
-MIN_SAMPLES = 36
+MIN_SAMPLES = 24
 MIN_HEAT = 6
-BOUNDS = ((0.005, 1.0), (0.0, 0.5), (-1.5, 1.5))
-PRIOR = (0.06, 0.02, 0.0)
-P0 = (0.05, 0.005, 1.0)
+MAX_GOOD_RMSE = 0.6  # K/h
+COARSE_STEP = 0.25  # K: kleinere Schritte nie gesehen -> grober Sensor
+BOUNDS = ((0.003, 0.5), (0.0, 0.3), (-0.5, 0.5))
+PRIOR = (0.025, 0.02, 0.0)
+P0 = (0.01, 0.002, 0.01)
 
 
 @dataclass
@@ -42,6 +48,7 @@ class Sample:
     vl: float | None
     boiler_on: bool
     window_open: bool
+    heat: float | None = None  # wirksame (verzögerte) Heizung, siehe apply_lag
 
 
 def drive(s: Sample) -> float:
@@ -51,29 +58,65 @@ def drive(s: Sample) -> float:
     return DEFAULT_DRIVE if s.boiler_on else 0.0
 
 
+LAG_ALPHA = 1.0 - math.exp(-1.0 / HEAT_LAG_MIN)
+
+
+def lag_step(prev: float | None, s: Sample) -> float | None:
+    """Wirksame Heizung um eine Minute weiterrechnen (Trägheit des Heizkörpers)."""
+    if s.u is None:
+        return prev
+    raw = s.u * drive(s)
+    if prev is None:
+        return raw
+    return prev + (raw - prev) * LAG_ALPHA
+
+
+def apply_lag(samples: list[Sample], start: float | None = None) -> float | None:
+    """Wirksame Heizung für eine ganze Reihe berechnen; gibt den Endwert zurück."""
+    h = start
+    for s in samples:
+        h = lag_step(h, s)
+        s.heat = h
+    return h
+
+
+def min_step(samples: list[Sample]) -> float | None:
+    """Kleinster Temperaturschritt eines Sensors (zur Erkennung grober Sensoren)."""
+    q = None
+    prev = None
+    for s in samples:
+        if s.tin is None:
+            continue
+        if prev is not None:
+            d = abs(s.tin - prev)
+            if d > 0.004 and (q is None or d < q):
+                q = d
+        prev = s.tin
+    return q
+
+
 def window_features(seg: list[Sample]) -> tuple[list[float], float, float] | None:
     """Merkmale und Messwert eines Fensters, oder None, wenn es unbrauchbar ist.
 
-    Rückgabe: (x, y, u_mittel) mit x = [-(Ti-Ta), u·Antrieb, 1], y = dT/dt in K/h.
+    Rückgabe: (x, y, u_mittel) mit x = [-(Ti-Ta), H, 1], y = dT/dt in K/h.
     """
-    if len(seg) < WINDOW_MIN + 1:
+    n = len(seg)
+    if n < 31:
         return None
     for s in seg:
-        if s.tin is None or s.tout is None or s.u is None or s.window_open:
+        if s.tin is None or s.tout is None or s.u is None or s.window_open or s.heat is None:
             return None
-    hours = (len(seg) - 1) / 60.0
-    # Steigung per linearer Regression über alle Punkte (robuster als Endpunkte)
-    n = len(seg)
+    # Steigung per linearer Regression über alle Punkte
     ts = [i / 60.0 for i in range(n)]
     tm = sum(ts) / n
     ym = sum(s.tin for s in seg) / n
     num = sum((t - tm) * (s.tin - ym) for t, s in zip(ts, seg, strict=True))
     den = sum((t - tm) ** 2 for t in ts)
-    y = num / den if den else (seg[-1].tin - seg[0].tin) / hours
+    y = num / den
     dt_mean = sum(s.tin - s.tout for s in seg) / n
-    ud = sum(s.u * drive(s) for s in seg) / n
+    heat = sum(s.heat for s in seg) / n
     u_mean = sum(s.u for s in seg) / n
-    return [-dt_mean, ud, 1.0], y, u_mean
+    return [-dt_mean, heat, 1.0], y, u_mean
 
 
 class RoomLearner:
@@ -81,6 +124,8 @@ class RoomLearner:
 
     def __init__(self, data: dict[str, Any] | None = None) -> None:
         d = data or {}
+        if d.get("version") != MODEL_VERSION:
+            d = {}
         self.theta: list[float] = list(d.get("theta") or PRIOR)
         self.P: list[list[float]] = d.get("P") or [
             [P0[0], 0.0, 0.0],
@@ -92,9 +137,11 @@ class RoomLearner:
         self.n_cool: int = int(d.get("n_cool", 0))
         self.mse: float = float(d.get("mse", 0.04))
         self.vl_heat: float = float(d.get("vl_heat", DEFAULT_VL_HEAT))
+        self.q: float | None = d.get("q")
 
     def as_dict(self) -> dict[str, Any]:
         return {
+            "version": MODEL_VERSION,
             "theta": self.theta,
             "P": self.P,
             "n": self.n,
@@ -102,24 +149,33 @@ class RoomLearner:
             "n_cool": self.n_cool,
             "mse": self.mse,
             "vl_heat": self.vl_heat,
+            "q": self.q,
         }
+
+    @property
+    def window_min(self) -> int:
+        """Fensterlänge: bei groben Sensoren länger, damit Stufen nicht als Sprünge zählen."""
+        return WINDOW_COARSE_MIN if (self.q is not None and self.q >= COARSE_STEP) else WINDOW_MIN
+
+    def note_step(self, q: float | None) -> None:
+        if q is not None and (self.q is None or q < self.q):
+            self.q = q
 
     # ---------------------------------------------------------------- Lernen
     def update(self, x: list[float], y: float, u_mean: float) -> float:
         """Ein Fenster einlernen, gibt den Vorhersagefehler (K/h) zurück."""
         th, P = self.theta, self.P
         pred = sum(t * xi for t, xi in zip(th, x, strict=True))
-        e = y - pred
-        # Ausreißer (z. B. Tür offen, Duschen) dämpfen
-        sigma = math.sqrt(max(self.mse, 1e-4))
-        if abs(e) > 4 * sigma and self.n > MIN_SAMPLES:
-            e = math.copysign(4 * sigma, e)
+        e_raw = y - pred
+        # Ausreißer (Baden, Tür offen, Sonne) dämpfen (Huber)
+        sigma = max(math.sqrt(max(self.mse, 0.0)), 0.15)
+        e = max(-3 * sigma, min(3 * sigma, e_raw)) if self.n >= 10 else e_raw
         Px = [sum(P[i][j] * x[j] for j in range(3)) for i in range(3)]
         denom = LAMBDA + sum(x[i] * Px[i] for i in range(3))
         k = [v / denom for v in Px]
         self.theta = [th[i] + k[i] * e for i in range(3)]
         self.P = [[(P[i][j] - k[i] * Px[j]) / LAMBDA for j in range(3)] for i in range(3)]
-        # Kovarianz begrenzen (numerische Stabilität bei wenig Anregung)
+        # Kovarianz begrenzen: ohne Anregung nicht unbegrenzt wachsen lassen
         for i in range(3):
             self.P[i][i] = min(self.P[i][i], P0[i] * 4)
         self.theta = [min(max(v, lo), hi) for v, (lo, hi) in zip(self.theta, BOUNDS, strict=True)]
@@ -128,8 +184,8 @@ class RoomLearner:
             self.n_heat += 1
         elif u_mean <= 0.05:
             self.n_cool += 1
-        self.mse = 0.98 * self.mse + 0.02 * e * e
-        return e
+        self.mse = 0.97 * self.mse + 0.03 * min(e_raw * e_raw, (4 * sigma) ** 2)
+        return e_raw
 
     def note_vl(self, vl: float | None, boiler_on: bool) -> None:
         """Typische Vorlauftemperatur beim Heizen mitlernen."""
@@ -137,12 +193,15 @@ class RoomLearner:
             self.vl_heat = 0.995 * self.vl_heat + 0.005 * vl
 
     def learn_series(self, samples: list[Sample]) -> int:
-        """Eine Minutenreihe in Fenstern einlernen (für den Start aus dem Verlauf)."""
-        used = 0
+        """Eine Minutenreihe einlernen (Start aus dem Verlauf). Setzt die verzögerte Heizung selbst."""
+        self.note_step(min_step(samples))
+        apply_lag(samples)
         for s in samples:
             self.note_vl(s.vl, s.boiler_on)
-        for start in range(0, len(samples) - WINDOW_MIN, STEP_MIN):
-            f = window_features(samples[start : start + WINDOW_MIN + 1])
+        w = self.window_min
+        used = 0
+        for start in range(0, len(samples) - w, STEP_MIN):
+            f = window_features(samples[start : start + w + 1])
             if f is None:
                 continue
             self.update(*f)
@@ -168,13 +227,14 @@ class RoomLearner:
 
     @property
     def progress(self) -> int:
-        """Lernstand in Prozent: genug Fenster, genug Heizphasen, Wärmeverlust sicher bestimmt."""
+        """Lernstand in Prozent: genug Fenster und Heizphasen, Wärmeverlust sicher, Fehler klein."""
         sd_a = self.sd(0)
-        conf = 1.0 if sd_a <= 0 else min(1.0, max(0.25 * self.a, 0.01) / sd_a)
+        conf = 1.0 if sd_a <= 0 else min(1.0, max(0.25 * self.a, 0.005) / sd_a)
         parts = (
             min(1.0, self.n / MIN_SAMPLES),
             min(1.0, self.n_heat / MIN_HEAT),
             conf,
+            min(1.0, MAX_GOOD_RMSE / max(self.rmse, 1e-6)),
         )
         return round(100 * min(parts))
 
@@ -191,7 +251,7 @@ class RoomLearner:
         return self.a * (tin - tout) - self.c
 
     def heat_rate(self, tin: float, tout: float, vl: float | None = None, has_vl: bool = True) -> float:
-        """Erwärmung bei voll offenem Ventil und heizendem Kessel in K/h."""
+        """Erwärmung bei voll offenem Ventil und heizendem Kessel in K/h (eingeschwungen)."""
         d = max(0.0, (vl if vl is not None else self.vl_heat) - tin) if has_vl else DEFAULT_DRIVE
         return self.b * d - self.a * (tin - tout) + self.c
 
@@ -201,7 +261,6 @@ class RoomLearner:
         """Minuten bis zur Zieltemperatur bei voller Heizleistung (None = nicht erreichbar)."""
         if tin >= target - 0.05:
             return 0.0
-        # Schrittweise rechnen, weil die Verluste mit steigender Temperatur wachsen
         t, minutes = tin, 0
         while t < target - 0.05:
             r = self.heat_rate(t, tout, vl, has_vl)

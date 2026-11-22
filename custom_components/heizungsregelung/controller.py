@@ -252,6 +252,7 @@ class Controller:
         }
         self.learn_bootstrapped = False
         self._learn_buf: dict[str, deque] = {}
+        self._learn_lag: dict[str, float | None] = {}
         self._learn_last_sample: datetime | None = None
         self._learn_count = 0
         self.log: deque[str] = deque(maxlen=25)
@@ -297,6 +298,7 @@ class Controller:
             "manual_levels": self.manual_levels,
             "learn": {k: v.as_dict() for k, v in self.learners.items()},
             "learn_bootstrapped": self.learn_bootstrapped,
+            "learn_version": learn.MODEL_VERSION,
         }
 
     async def _call(self, domain: str, service: str, data: dict[str, Any], text: str) -> None:
@@ -369,7 +371,7 @@ class Controller:
         for k, v in (d.get("learn") or {}).items():
             if k in self.learners:
                 self.learners[k] = learn.RoomLearner(v)
-        self.learn_bootstrapped = bool(d.get("learn_bootstrapped"))
+        self.learn_bootstrapped = bool(d.get("learn_bootstrapped")) and d.get("learn_version") == learn.MODEL_VERSION
         for k, v in (d.get("rhythm") or {}).items():
             self.rhythm[k] = RhythmState.from_dict(v)
 
@@ -964,20 +966,26 @@ class Controller:
             lr = self.learners.get(room.room_id)
             if lr is None:
                 continue
-            buf = self._learn_buf.setdefault(room.room_id, deque(maxlen=learn.WINDOW_MIN + 1))
-            buf.append(
-                learn.Sample(
-                    tin=self._room_current(room),
-                    tout=tout,
-                    u=self._room_u(room),
-                    vl=vl,
-                    boiler_on=boiler_on,
-                    window_open=self._window_blocked(room),
-                )
+            buf = self._learn_buf.setdefault(room.room_id, deque(maxlen=learn.WINDOW_COARSE_MIN + 1))
+            sample = learn.Sample(
+                tin=self._room_current(room),
+                tout=tout,
+                u=self._room_u(room),
+                vl=vl,
+                boiler_on=boiler_on,
+                window_open=self._window_blocked(room),
             )
+            self._learn_lag[room.room_id] = learn.lag_step(self._learn_lag.get(room.room_id), sample)
+            sample.heat = self._learn_lag[room.room_id]
+            if buf and buf[-1].tin is not None and sample.tin is not None:
+                step = abs(sample.tin - buf[-1].tin)
+                if step > 0.004:
+                    lr.note_step(step)
+            buf.append(sample)
             lr.note_vl(vl, boiler_on)
-            if learn_now and len(buf) == buf.maxlen:
-                f = learn.window_features(list(buf))
+            w = lr.window_min
+            if learn_now and len(buf) >= w + 1:
+                f = learn.window_features(list(buf)[-(w + 1):])
                 if f is not None:
                     lr.update(*f)
                     changed = True
