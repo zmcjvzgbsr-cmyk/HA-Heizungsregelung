@@ -1,11 +1,12 @@
 /* heizung-haus-card – Hausschnitt-Dashboard der Integration „Heizungsregelung“ */
-const HHC_VERSION = '0.2.1';
+const HHC_VERSION = '0.3.0';
 
 const HHC_ICON = {
   flame: '<path d="M12 3c1 3 4 5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"/>',
   down: '<path d="M12 4v16"/><path d="M19 13l-7 7-7-7"/>',
   up: '<path d="M12 20V4"/><path d="M5 11l7-7 7 7"/>',
   check: '<path d="M4 12l5 5L20 6"/>',
+  snow: '<path d="M12 2v20"/><path d="M3.5 7l17 10"/><path d="M20.5 7l-17 10"/><path d="M9 3.5l3 2 3-2"/><path d="M9 20.5l3-2 3 2"/>',
   window: '<rect x="4" y="3" width="16" height="18"/><path d="M12 3v18"/><path d="M4 12h16"/>',
 };
 
@@ -144,6 +145,9 @@ class HeizungHausCard extends HTMLElement {
       h.callService('select', 'select_option', { entity_id: this._e('betriebsart'), option: arg });
     } else if (action === 'toggle') {
       h.callService('switch', 'toggle', { entity_id: arg });
+    } else if (action === 'level') {
+      const i = arg.indexOf('|');
+      h.callService('select', 'select_option', { entity_id: arg.slice(0, i), option: arg.slice(i + 1) });
     } else if (action === 'eingriffe') {
       const id = this._e('eingriffe_aktiv');
       const on = this._st(id) === 'on';
@@ -196,6 +200,12 @@ class HeizungHausCard extends HTMLElement {
         const hum = this._n(r.humidity_sensor);
         if (hum != null) out.notes.push({ c: '', t: 'FEUCHTE ' + hhcFmt(hum, 0) + ' %' });
       }
+      if (r.thermostat_type === 'manual') {
+        const id = this._e(r.room_id + '_stufe');
+        out.manual = { id, levels: r.levels || [], cur: this._st(id) };
+        out.more = tempId || id;
+        if (r.radiators) out.notes.push({ c: '', t: String(r.radiators).toUpperCase() });
+      }
       const lead = this._attr(this._e('heizbedarf'), 'fuehrender_raum');
       const bedarf = this._n(this._e('heizbedarf'));
       if (!away && lead && lead === r.name && bedarf != null && bedarf > 0) out.notes.push({ c: 'ora', t: 'BESTIMMT DEN BEDARF' });
@@ -214,6 +224,16 @@ class HeizungHausCard extends HTMLElement {
       (r.hasTrv
         ? '<div class="rs"><span class="mut">SOLL ' + (r.soll != null ? hhcFmt(r.soll, 1) : '–') + '</span><span class="st">' + (r.state ? hhcSvg(r.state, 13, 3) : '') + hhcEsc(r.stateTxt) + '</span></div>' +
           (r.valve != null ? '<div class="vs">' + segs + '</div><div class="vl"><span>VENTIL</span><span>' + hhcFmt(r.valve, 0) + ' %</span></div>' : '')
+        : '') +
+      (r.manual && r.manual.id
+        ? '<div class="lv" role="group" aria-label="Thermostat-Stufe ' + hhcEsc(r.name) + '">' + r.manual.levels.map((l) => {
+            const sel = l === r.manual.cur;
+            const kind = l === '0' ? 'z' : (l === '❄' || l === '*') ? 'c' : 'o';
+            const lbl = (l === '❄' || l === '*') ? 'Frostschutz' : 'Stufe ' + l;
+            return '<button class="' + (sel ? 'sel ' + kind : '') + '" aria-pressed="' + sel + '" aria-label="' + hhcEsc(lbl) + '" data-action="level" data-arg="' + hhcEsc(r.manual.id + '|' + l) + '">' +
+              ((l === '❄' || l === '*') ? hhcSvg('snow', 14, 2) : hhcEsc(l)) + '</button>';
+          }).join('') + '</div><div class="vl"><span>STUFE</span><span>' +
+          (r.manual.cur === '❄' || r.manual.cur === '*' ? 'FROSTSCHUTZ' : r.manual.cur === '0' ? 'AUS' : hhcEsc(r.manual.cur || '–')) + '</span></div>'
         : '') +
       r.notes.map((n) => '<span class="note ' + n.c + '">' + (n.icon ? hhcSvg(n.icon, 11, 2) : '') + hhcEsc(n.t) + '</span>').join('') +
       '</div>';
@@ -462,12 +482,17 @@ aside{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:22px}
 .room.cold .rt b{color:#00E5FF;text-shadow:0 0 12px #00E5FF}
 .room.warm .rt b{color:#FF9F1C;text-shadow:0 0 12px #FF9F1C}
 .room.none .rt b{color:#A39FC2}
-.rs{display:flex;justify-content:space-between;align-items:center;gap:6px;font-family:"Share Tech Mono",monospace;font-size:12px}
+.rs{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;font-family:"Share Tech Mono",monospace;font-size:12px}
 .st{display:flex;align-items:center;gap:3px}
 .room.cold .st{color:#00E5FF}.room.warm .st{color:#FF9F1C}
 .vs{display:flex;gap:2px}.vs i{flex:1;height:8px;background:#2A2445}
 .vs i.f{background:#FF9F1C;box-shadow:0 0 6px #FF9F1C}
-.vl{display:flex;justify-content:space-between;font-family:"Share Tech Mono",monospace;font-size:11px;color:#A39FC2;margin-top:-4px}
+.lv{display:flex;gap:3px;margin-top:auto}
+.lv button{flex:1 1 0;min-width:0;height:36px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid #2A2445;color:#A39FC2;font-family:Orbitron,sans-serif;font-weight:700;font-size:12px}
+.lv button.sel.o{background:#FF9F1C;border-color:#FF9F1C;color:#07060D;box-shadow:0 0 8px #FF9F1C}
+.lv button.sel.c{background:#00E5FF;border-color:#00E5FF;color:#07060D;box-shadow:0 0 8px #00E5FF}
+.lv button.sel.z{background:#ECEAF7;border-color:#ECEAF7;color:#07060D}
+.vl{display:flex;gap:6px;justify-content:space-between;font-family:"Share Tech Mono",monospace;font-size:11px;color:#A39FC2;margin-top:-4px}
 .note{display:flex;align-items:center;gap:4px;font-family:"Share Tech Mono",monospace;font-size:11px;line-height:1.35;color:#A39FC2}
 .note.mag{color:#FF3DCB}.note.ora{color:#FF9F1C}.note.warn{color:#FCEE0A}
 .kgrid{display:flex;flex-wrap:wrap;gap:8px}
@@ -532,7 +557,8 @@ aside .col{gap:14px}
  .room{min-height:118px;padding:9px;gap:5px;clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px))}
  .rn{font-size:10px;letter-spacing:1px}
  .rt b{font-size:24px}.rt small{font-size:12px}
- .rs{font-size:11px}.vs i{height:6px}.vl{display:none}
+ .rs{font-size:11px}.vs i{height:6px}.vs+.vl{display:none}
+ .lv button{height:32px;font-size:11px}
  .note{font-size:10px}
  .big b{font-size:42px}.big.m b{font-size:36px}
  .g4{grid-template-columns:repeat(2,minmax(0,1fr))}

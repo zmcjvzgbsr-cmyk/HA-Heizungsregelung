@@ -30,6 +30,11 @@ from .const import (
     CONF_ROOM_EXC_TEMP,
     CONF_ROOM_HEIMKEHR,
     CONF_ROOM_HUMIDITY,
+    CONF_ROOM_LEVELS,
+    CONF_ROOM_RADIATORS,
+    CONF_ROOM_TYPE,
+    ROOM_TYPE_MANUAL,
+    ROOM_TYPE_SMART,
     CONF_ROOM_ID,
     CONF_ROOM_IN_DEMAND,
     CONF_ROOM_MAX_TEMP,
@@ -53,8 +58,8 @@ from .const import (
 
 SECTIONS = {
     "grund": [
-        CONF_ROOM_NAME, CONF_ROOM_CLIMATE, CONF_ROOM_SENSOR, CONF_ROOM_WINDOW,
-        CONF_ROOM_IN_DEMAND, CONF_ROOM_HEIMKEHR, CONF_ROOM_MAX_TEMP,
+        CONF_ROOM_NAME, CONF_ROOM_TYPE, CONF_ROOM_CLIMATE, CONF_ROOM_LEVELS, CONF_ROOM_RADIATORS,
+        CONF_ROOM_SENSOR, CONF_ROOM_WINDOW, CONF_ROOM_IN_DEMAND, CONF_ROOM_HEIMKEHR, CONF_ROOM_MAX_TEMP,
     ],
     "ausnahme": [
         CONF_ROOM_EXC_ENABLED, CONF_ROOM_EXC_START, CONF_ROOM_EXC_END,
@@ -127,7 +132,18 @@ def _room_schema(d: dict[str, Any]) -> vol.Schema:
     grund = vol.Schema(
         {
             _req(CONF_ROOM_NAME, d): selector.TextSelector(),
-            _req(CONF_ROOM_CLIMATE, d): selector.EntitySelector(selector.EntitySelectorConfig(domain="climate")),
+            _req(CONF_ROOM_TYPE, d): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value=ROOM_TYPE_SMART, label="Smartes Thermostat"),
+                        selector.SelectOptionDict(value=ROOM_TYPE_MANUAL, label="Handthermostat"),
+                    ],
+                    mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
+            _opt(CONF_ROOM_CLIMATE, d): selector.EntitySelector(selector.EntitySelectorConfig(domain="climate")),
+            _req(CONF_ROOM_LEVELS, d): selector.TextSelector(),
+            _opt(CONF_ROOM_RADIATORS, d): selector.TextSelector(),
             _opt(CONF_ROOM_SENSOR, d): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
             ),
@@ -187,6 +203,14 @@ def _flatten(user_input: dict[str, Any]) -> dict[str, Any]:
 
 def _validate_room(flat: dict[str, Any]) -> dict[str, str]:
     errors: dict[str, str] = {}
+    if flat.get(CONF_ROOM_TYPE, ROOM_TYPE_SMART) == ROOM_TYPE_SMART and not flat.get(CONF_ROOM_CLIMATE):
+        errors["base"] = "climate_required"
+        return errors
+    if flat.get(CONF_ROOM_TYPE) == ROOM_TYPE_MANUAL and not [
+        x for x in str(flat.get(CONF_ROOM_LEVELS) or "").split(",") if x.strip()
+    ]:
+        errors["base"] = "levels_required"
+        return errors
     if flat.get(CONF_ROOM_EXC_ENABLED) and not (flat.get(CONF_ROOM_EXC_START) and flat.get(CONF_ROOM_EXC_END)):
         errors["base"] = "exception_times"
     return errors

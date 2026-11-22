@@ -89,8 +89,16 @@ MODE_LABELS = {
 WEEKDAY_LABELS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
 
 CONF_ROOM_HEIMKEHR = "heimkehr_boost"
+CONF_ROOM_TYPE = "thermostat_type"
+CONF_ROOM_LEVELS = "manual_levels"
+CONF_ROOM_RADIATORS = "radiators"
+ROOM_TYPE_SMART = "smart"
+ROOM_TYPE_MANUAL = "manual"
+DEFAULT_LEVELS = "0, ❄, 2, 3, 4, 5"
 
 ROOM_DEFAULTS = {
+    CONF_ROOM_TYPE: ROOM_TYPE_SMART,
+    CONF_ROOM_LEVELS: DEFAULT_LEVELS,
     CONF_ROOM_IN_DEMAND: True,
     CONF_ROOM_HEIMKEHR: True,
     CONF_ROOM_EXC_ENABLED: False,

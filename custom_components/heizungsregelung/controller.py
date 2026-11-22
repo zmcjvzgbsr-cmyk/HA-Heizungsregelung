@@ -44,6 +44,9 @@ from .const import (
     CONF_ROOM_HUMIDITY,
     CONF_ROOM_ID,
     CONF_ROOM_IN_DEMAND,
+    CONF_ROOM_LEVELS,
+    CONF_ROOM_RADIATORS,
+    CONF_ROOM_TYPE,
     CONF_ROOM_MAX_TEMP,
     CONF_ROOM_NAME,
     CONF_ROOM_REMIND,
@@ -77,6 +80,7 @@ from .const import (
     PARAMS,
     REMINDER_REPEAT_SECONDS,
     ROOM_DEFAULTS,
+    ROOM_TYPE_MANUAL,
     SETPOINT_DELAY_SECONDS,
     SETPOINT_MIN_DELTA_DELAYED,
     SETPOINT_MIN_DELTA_IMMEDIATE,
@@ -101,7 +105,7 @@ class RoomConfig:
 
     room_id: str
     name: str
-    climate: str
+    climate: str | None
     temperature_sensor: str | None
     window_sensor: str | None
     in_demand: bool
@@ -122,14 +126,19 @@ class RoomConfig:
     humidity_sensor: str | None
     remind_minutes: float
     remind_humidity: float
+    manual: bool = False
+    levels: list[str] = field(default_factory=list)
+    radiators: str | None = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> RoomConfig:
         g = {**ROOM_DEFAULTS, **{k: v for k, v in d.items() if v is not None}}
-        return cls(
+        manual = g.get(CONF_ROOM_TYPE) == ROOM_TYPE_MANUAL or not g.get(CONF_ROOM_CLIMATE)
+        levels = [x.strip() for x in str(g.get(CONF_ROOM_LEVELS) or "").split(",") if x.strip()]
+        room = cls(
             room_id=g[CONF_ROOM_ID],
             name=g[CONF_ROOM_NAME],
-            climate=g[CONF_ROOM_CLIMATE],
+            climate=None if manual else g[CONF_ROOM_CLIMATE],
             temperature_sensor=g.get(CONF_ROOM_SENSOR) or None,
             window_sensor=g.get(CONF_ROOM_WINDOW) or None,
             in_demand=bool(g[CONF_ROOM_IN_DEMAND]),
@@ -150,7 +159,18 @@ class RoomConfig:
             humidity_sensor=g.get(CONF_ROOM_HUMIDITY) or None,
             remind_minutes=float(g[CONF_ROOM_REMIND_MINUTES]),
             remind_humidity=float(g[CONF_ROOM_REMIND_HUMIDITY]),
+            manual=manual,
+            levels=levels or ["0"],
+            radiators=g.get(CONF_ROOM_RADIATORS) or None,
         )
+        if manual:
+            # Handthermostat: nichts zu regeln, zählt nicht für den Kessel
+            room.in_demand = False
+            room.heimkehr = False
+            room.exc_enabled = False
+            room.rhythm = False
+            room.max_temp = None
+        return room
 
 
 @dataclass
@@ -218,6 +238,7 @@ class Controller:
         self.window_closed_at: dict[str, datetime] = {}
         self.last_reminder: dict[str, datetime] = {}
         self.away_applied: dict[str, float] = {}
+        self.manual_levels: dict[str, str] = {}
         self.snapshot = Snapshot()
         self.log: deque[str] = deque(maxlen=25)
 
@@ -259,6 +280,7 @@ class Controller:
             "heizt": self.heizt,
             "modus_seit": self.modus_seit.isoformat(),
             "rhythm": {k: v.as_dict() for k, v in self.rhythm.items()},
+            "manual_levels": self.manual_levels,
         }
 
     async def _call(self, domain: str, service: str, data: dict[str, Any], text: str) -> None:
@@ -297,7 +319,7 @@ class Controller:
             self._unsubs.append(
                 async_track_state_change_event(self.hass, windows, self._window_changed)
             )
-        climates = [r.climate for r in self.rooms]
+        climates = [r.climate for r in self.rooms if r.climate]
         if climates:
             self._unsubs.append(
                 async_track_state_change_event(self.hass, climates, self._climate_changed)
@@ -327,6 +349,7 @@ class Controller:
         self.heizt = bool(d.get("heizt"))
         if d.get("modus_seit"):
             self.modus_seit = dt_util.parse_datetime(d["modus_seit"]) or dt_util.utcnow()
+        self.manual_levels.update({k: str(v) for k, v in (d.get("manual_levels") or {}).items()})
         for k, v in (d.get("rhythm") or {}).items():
             self.rhythm[k] = RhythmState.from_dict(v)
 
@@ -801,6 +824,8 @@ class Controller:
         self._signal()
 
     async def _set_room(self, room: RoomConfig, temp: float, why: str, hvac: bool = False) -> None:
+        if not room.climate:
+            return  # Handthermostat
         data: dict[str, Any] = {"entity_id": room.climate, "temperature": temp}
         if hvac:
             data["hvac_mode"] = "heat"
@@ -863,6 +888,20 @@ class Controller:
                     },
                     f"Erinnerung {room.name} an {svc}",
                 )
+
+    # ------------------------------------------------------------------ Handthermostate
+    def manual_level(self, room: RoomConfig) -> str:
+        level = self.manual_levels.get(room.room_id)
+        return level if level in room.levels else room.levels[0]
+
+    async def async_set_manual_level(self, room_id: str, level: str) -> None:
+        room = self.room(room_id)
+        if room is None or level not in room.levels:
+            return
+        self.manual_levels[room_id] = level
+        self._note(f"{room.name}: Handthermostat auf {level}")
+        self._save()
+        self._signal()
 
     # ------------------------------------------------------------------ Anzeige
     @property

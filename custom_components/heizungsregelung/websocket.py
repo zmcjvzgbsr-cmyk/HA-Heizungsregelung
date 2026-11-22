@@ -24,6 +24,9 @@ def _room_dict(room: Any) -> dict[str, Any]:
         d[key] = d[key].strftime("%H:%M:%S") if d.get(key) else None
     return {
         "room_id": d["room_id"],
+        "thermostat_type": "manual" if d["manual"] else "smart",
+        "levels": d["levels"],
+        "radiators": d["radiators"],
         "name": d["name"],
         "climate": d["climate"],
         "temperature_sensor": d["temperature_sensor"],

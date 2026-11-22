@@ -16,7 +16,10 @@ _BY_LABEL = {v: k for k, v in MODE_LABELS.items()}
 async def async_setup_entry(
     hass: HomeAssistant, entry: HeizungConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
 ) -> None:
-    async_add_entities([ModeSelect(entry.runtime_data)])
+    c = entry.runtime_data
+    entities: list[SelectEntity] = [ModeSelect(c)]
+    entities += [ManualLevelSelect(c, room) for room in c.rooms if room.manual]
+    async_add_entities(entities)
 
 
 class ModeSelect(HeizungEntity, SelectEntity):
@@ -32,3 +35,24 @@ class ModeSelect(HeizungEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         await self.controller.async_set_mode(_BY_LABEL[option])
+
+
+class ManualLevelSelect(HeizungEntity, SelectEntity):
+    """Aktuelle Stufe eines Handthermostats (von Hand gepflegt)."""
+
+    _attr_icon = "mdi:thermostat-box"
+
+    def __init__(self, c, room) -> None:
+        super().__init__(c, "stufe", "Thermostat-Stufe", room)
+        self._attr_options = list(room.levels)
+
+    @property
+    def current_option(self) -> str:
+        return self.controller.manual_level(self.room)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"heizkoerper": self.room.radiators} if self.room.radiators else {}
+
+    async def async_select_option(self, option: str) -> None:
+        await self.controller.async_set_manual_level(self.room.room_id, option)

@@ -23,6 +23,9 @@ Eigene Integration, die einen modulierenden Gaskessel nach dem tatsächlichen W�
 **Wiederkehrende Abwesenheit je Raum**
 - Schalter *Jedes 2. Wochenende weg* plus *Abwesend von/bis*. Der Raum hält dann die eingestellte Temperatur; ein Wächter stellt sie zurück, falls ein Plan dazwischenfunkt, und merkt sich den Planwert. Am Ende wird der Planwert wiederhergestellt und der Termin um das Intervall weitergeschoben.
 
+**Handthermostate**
+- Thermostat-Typ je Raum: *Smartes Thermostat* (wird geregelt) oder *Handthermostat*. Für Handthermostate legt die Integration die Auswahl *Thermostat-Stufe* an (Standard: 0, ❄, 2, 3, 4, 5, je Raum anpassbar) und merkt sich die Einstellung; der Raum zählt nicht zum Heizbedarf. Heizkörper (Typ, Größe) lassen sich je Raum hinterlegen. In der Karte erscheinen die Stufen zum Antippen.
+
 **Je Raum außerdem**
 - Höchsttemperatur: höhere Sollwerte (aus Plänen oder von Hand) werden zurückgestellt.
 - Fenster-Erinnerung aufs Handy: nach X Minuten offen, optional erst wenn die Luftfeuchte unter dem Grenzwert liegt; höchstens alle 30 Minuten.

@@ -18,7 +18,7 @@ async def async_setup_entry(
 ) -> None:
     c = entry.runtime_data
     entities: list[SensorEntity] = [BedarfSensor(c), SollwertSensor(c), StatusSensor(c)]
-    entities += [RoomDeficitSensor(c, room) for room in c.rooms]
+    entities += [RoomDeficitSensor(c, room) for room in c.rooms if not room.manual]
     async_add_entities(entities)
 
 

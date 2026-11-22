@@ -117,6 +117,49 @@ async def test_flow_setup_rooms_and_tick(hass: HomeAssistant, hass_ws_client) ->
     assert hass.states.get("switch.heizungsregelung_eingriffe_aktiv").state == "on"
     assert any(c.data.get("entity_id") == "climate.remeha" for c in calls), calls
 
+    # Handthermostat-Raum anlegen
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "add_room"})
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "grund": {
+                "name": "Schlafzimmer", "thermostat_type": "manual", "manual_levels": "0, ❄, 2, 3, 4, 5",
+                "radiators": "Typ 22 100x60", "in_demand": True, "heimkehr_boost": True,
+            },
+            "ausnahme": {"away_exception": False, "away_exception_temperature": 20},
+            "rhythmus": {
+                "rhythm": False, "rhythm_weekday": "4", "rhythm_start": "16:00:00",
+                "rhythm_duration_hours": 47, "rhythm_interval_days": 14, "rhythm_temperature": 18,
+            },
+            "erinnerung": {"window_reminder": False, "reminder_minutes": 15, "reminder_humidity_below": 65},
+        },
+    )
+    assert result["type"] == "create_entry", result
+    await asyncio.wait_for(hass.async_block_till_done(), 30)
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    ents = {e.entity_id for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)}
+    sel = next(e for e in ents if e.startswith("select.") and "schlafzimmer" in e)
+    assert hass.states.get(sel).state == "0"
+    await hass.services.async_call("select", "select_option", {"entity_id": sel, "option": "❄"}, blocking=True)
+    await hass.async_block_till_done()
+    assert hass.states.get(sel).state == "❄"
+
+    # Smartes Thermostat ohne Thermostat-Entität wird abgelehnt
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "add_room"})
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "grund": {"name": "Test", "thermostat_type": "smart", "manual_levels": "0", "in_demand": True, "heimkehr_boost": True},
+            "ausnahme": {"away_exception": False, "away_exception_temperature": 20},
+            "rhythmus": {"rhythm": False, "rhythm_weekday": "4", "rhythm_start": "16:00:00", "rhythm_duration_hours": 47, "rhythm_interval_days": 14, "rhythm_temperature": 18},
+            "erinnerung": {"window_reminder": False, "reminder_minutes": 15, "reminder_humidity_below": 65},
+        },
+    )
+    assert result["type"] == "form" and result["errors"] == {"base": "climate_required"}, result
+    await hass.config_entries.options.async_abort(result["flow_id"]) if hasattr(hass.config_entries.options, "async_abort") else None
+
     # Entladen
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()

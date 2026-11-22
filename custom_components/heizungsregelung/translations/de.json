@@ -63,7 +63,10 @@
             "name": "Raum",
             "data": {
               "name": "Name",
+              "thermostat_type": "Thermostat-Typ",
               "climate": "Thermostat",
+              "manual_levels": "Stufen des Handthermostats",
+              "radiators": "Heizkörper",
               "temperature_sensor": "Raumtemperatur-Sensor",
               "window_sensor": "Fenstersensor",
               "in_demand": "Zählt zum Heizbedarf",
@@ -71,7 +74,10 @@
               "max_temperature": "Höchsttemperatur"
             },
             "data_description": {
-              "climate": "Z. B. die Better-Thermostat-Entität.",
+              "thermostat_type": "Handthermostat: Die Integration legt eine Auswahl „Thermostat-Stufe“ an; der Raum regelt nichts und zählt nicht zum Heizbedarf.",
+              "climate": "Nur bei smartem Thermostat, z. B. die Better-Thermostat-Entität.",
+              "manual_levels": "Durch Komma getrennt, z. B. 0, ❄, 2, 3, 4, 5.",
+              "radiators": "Optional, z. B. 2× Typ 22 60×60.",
               "temperature_sensor": "Optional. Sonst die Ist-Temperatur des Thermostats.",
               "window_sensor": "Optional. Offenes Fenster: Raum zählt nicht zum Heizbedarf.",
               "in_demand": "Aus: Raum fordert den Kessel nie an (z. B. Flur).",
@@ -130,7 +136,10 @@
             "name": "Raum",
             "data": {
               "name": "Name",
+              "thermostat_type": "Thermostat-Typ",
               "climate": "Thermostat",
+              "manual_levels": "Stufen des Handthermostats",
+              "radiators": "Heizkörper",
               "temperature_sensor": "Raumtemperatur-Sensor",
               "window_sensor": "Fenstersensor",
               "in_demand": "Zählt zum Heizbedarf",
@@ -138,7 +147,10 @@
               "max_temperature": "Höchsttemperatur"
             },
             "data_description": {
-              "climate": "Z. B. die Better-Thermostat-Entität.",
+              "thermostat_type": "Handthermostat: Die Integration legt eine Auswahl „Thermostat-Stufe“ an; der Raum regelt nichts und zählt nicht zum Heizbedarf.",
+              "climate": "Nur bei smartem Thermostat, z. B. die Better-Thermostat-Entität.",
+              "manual_levels": "Durch Komma getrennt, z. B. 0, ❄, 2, 3, 4, 5.",
+              "radiators": "Optional, z. B. 2× Typ 22 60×60.",
               "temperature_sensor": "Optional. Sonst die Ist-Temperatur des Thermostats.",
               "window_sensor": "Optional. Offenes Fenster: Raum zählt nicht zum Heizbedarf.",
               "in_demand": "Aus: Raum fordert den Kessel nie an (z. B. Flur).",
@@ -204,7 +216,9 @@
       }
     },
     "error": {
-      "exception_times": "Für die Ausnahme bei Abwesenheit brauchst du Beginn und Ende."
+      "exception_times": "Für die Ausnahme bei Abwesenheit brauchst du Beginn und Ende.",
+      "climate_required": "Für ein smartes Thermostat bitte die Thermostat-Entität auswählen.",
+      "levels_required": "Bitte mindestens eine Stufe angeben."
     }
   }
 }
