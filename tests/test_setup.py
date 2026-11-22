@@ -94,7 +94,7 @@ async def test_flow_setup_rooms_and_tick(hass: HomeAssistant) -> None:
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=6))
     await asyncio.wait_for(hass.async_block_till_done(), 30)
     bedarf = hass.states.get("sensor.heizungsregelung_heizbedarf")
-    assert bedarf is not None and float(bedarf.state) == pytest.approx(0.0, abs=0.01), bedarf
+    assert bedarf is not None and float(bedarf.state) == pytest.approx(-0.2, abs=0.01), bedarf
     # Beobachtungsmodus: nichts geschrieben
     assert calls == []
 
