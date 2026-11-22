@@ -1,5 +1,5 @@
 /* heizung-haus-card – Hausschnitt-Dashboard der Integration „Heizungsregelung“ */
-const HHC_VERSION = '0.2.0';
+const HHC_VERSION = '0.2.1';
 
 const HHC_ICON = {
   flame: '<path d="M12 3c1 3 4 5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"/>',
@@ -23,6 +23,23 @@ function hhcTime(iso) {
   const d = new Date(iso);
   return isNaN(d) ? '--:--' : d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
+// Nur Geändertes im DOM anpassen, statt alles neu aufzubauen (sonst springt die Seite beim Scrollen)
+function hhcMorph(target, source) {
+  const tNodes = Array.from(target.childNodes);
+  const sNodes = Array.from(source.childNodes);
+  for (let i = 0; i < sNodes.length; i++) {
+    const s = sNodes[i];
+    const t = tNodes[i];
+    if (!t) { target.appendChild(s.cloneNode(true)); continue; }
+    if (t.nodeType !== s.nodeType || t.nodeName !== s.nodeName) { target.replaceChild(s.cloneNode(true), t); continue; }
+    if (t.nodeType !== 1) { if (t.nodeValue !== s.nodeValue) t.nodeValue = s.nodeValue; continue; }
+    for (const a of Array.from(t.attributes)) if (!s.hasAttribute(a.name)) t.removeAttribute(a.name);
+    for (const a of Array.from(s.attributes)) if (t.getAttribute(a.name) !== a.value) t.setAttribute(a.name, a.value);
+    hhcMorph(t, s);
+  }
+  for (let i = tNodes.length - 1; i >= sNodes.length; i--) target.removeChild(tNodes[i]);
+}
+
 function hhcDay(iso) {
   const d = new Date(iso);
   if (isNaN(d)) return '–';
@@ -321,15 +338,28 @@ class HeizungHausCard extends HTMLElement {
   }
 
   // ---------------------------------------------------------------- Render
+  _patch(html) {
+    if (!this._root) {
+      this.shadowRoot.innerHTML = '<style>' + HHC_CSS + '</style><div id="hhc-root"></div>';
+      this._root = this.shadowRoot.getElementById('hhc-root');
+      this._last = null;
+    }
+    if (html === this._last) return;
+    this._last = html;
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    hhcMorph(this._root, tpl.content);
+  }
+
   _render() {
     if (!this.shadowRoot || !this._hass || !this._config) return;
     const c = this._config;
     if (this._err && !this._meta) {
-      this.shadowRoot.innerHTML = '<style>' + HHC_CSS + '</style><div class="wrap"><div class="pan cut16 col"><b class="t">HEIZUNGSREGELUNG NICHT ERREICHBAR</b><span class="sub">' + hhcEsc(this._err) + '</span></div></div>';
+      this._patch('<div class="wrap"><div class="pan cut16 col"><b class="t">HEIZUNGSREGELUNG NICHT ERREICHBAR</b><span class="sub">' + hhcEsc(this._err) + '</span></div></div>');
       return;
     }
     if (!this._meta) {
-      this.shadowRoot.innerHTML = '<style>' + HHC_CSS + '</style><div class="wrap"><span class="lbl">// VERBINDE …</span></div>';
+      this._patch('<div class="wrap"><span class="lbl">// VERBINDE …</span></div>');
       return;
     }
     const m = this._meta;
@@ -349,7 +379,7 @@ class HeizungHausCard extends HTMLElement {
       '<div class="rooms">' + (f.rooms || []).map((r) => this._roomHtml(this._roomModel(r))).join('') + '</div></div>'
     ).join('<div class="slab"></div>');
 
-    this.shadowRoot.innerHTML = '<style>' + HHC_CSS + '</style><div class="wrap"><div class="scan"></div><div class="inner">' +
+    this._patch('<div class="wrap"><div class="scan"></div><div class="inner">' +
       '<header><div class="top"><div><span class="lbl">// HEIZUNGS-LINK · ' + stamp + '</span><h1>' + title + '</h1></div>' +
       '<div class="chip cut9" data-more="' + hhcEsc(this._e('status') || '') + '"><i></i>' + hhcEsc(status.toUpperCase()) + '</div></div>' +
       '<div class="bar"></div><div class="pills">' +
@@ -366,7 +396,7 @@ class HeizungHausCard extends HTMLElement {
           '<div class="pipes" aria-hidden="true"><span class="po"></span><span class="pc"></span></div>' +
         '</div>' +
         '<div class="legend"><span class="c">' + hhcSvg('down', 13, 3) + 'ZU KALT</span><span>' + hhcSvg('check', 13, 3) + 'PASST ±' + hhcFmt(c.tolerance, 1) + ' K</span><span class="o">' + hhcSvg('up', 13, 3) + 'ZU WARM</span><span class="mag">MAGENTA · ABWESEND</span><span class="mut">GESTRICHELT · OHNE THERMOSTAT</span><span class="mut">LINIEN · VORLAUF / RÜCKLAUF</span></div>' +
-      '</section>' + this._aside() + '</div></div></div>';
+      '</section>' + this._aside() + '</div></div></div>');
   }
 }
 
