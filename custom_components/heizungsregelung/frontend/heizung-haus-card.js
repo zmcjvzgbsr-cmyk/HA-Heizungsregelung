@@ -1,5 +1,5 @@
 /* heizung-haus-card – Hausschnitt-Dashboard der Integration „Heizungsregelung“ */
-const HHC_VERSION = '0.4.3';
+const HHC_VERSION = '0.5.0';
 
 const HHC_ICON = {
   flame: '<path d="M12 3c1 3 4 5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"/>',

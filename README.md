@@ -25,10 +25,13 @@ Eigene Integration, die einen modulierenden Gaskessel nach dem tatsächlichen W�
 
 **Lernendes Raummodell**
 - Für jeden Raum mit smartem Thermostat lernt die Integration laufend, wie schnell er auskühlt (Wärmeverlust, abhängig von der Außentemperatur) und wie schnell er bei offenem Ventil warm wird (abhängig von der Vorlauftemperatur). Grundlage sind Raumtemperatur, Außentemperatur, Ventilstellung und Vorlauf; offene Fenster werden ausgeblendet.
-- Beim ersten Start lernt das Modell aus den letzten 7 Tagen im Verlauf (Recorder), danach alle 15 Minuten weiter – aus 60-Minuten-Fenstern, bei groben Sensoren (0,5-K-Schritte) aus 120-Minuten-Fenstern. Die Trägheit des Heizkörpers (≈ 20 min) ist berücksichtigt, Ausreißer wie Baden oder offene Türen werden gedämpft.
-- Sensoren je Raum: *Auskühlrate* (K/h), *Aufheizrate* (K/h, bei voll offenem Ventil) und *Zeit bis Zieltemperatur* (min). Sie bleiben leer, bis das Modell sicher genug ist; das Attribut `lernstand` zeigt den Fortschritt, die Aufheizrate zusätzlich Zeitkonstante, Wärmeverlust und Modellfehler.
+- Beim ersten Start lernt das Modell aus den letzten 10 Tagen im Verlauf (Recorder), danach alle 15 Minuten weiter – aus 60-Minuten-Fenstern, bei groben Sensoren (0,5-K-Schritte) aus 120-Minuten-Fenstern. Ältere Daten verblassen langsam (Gedächtnis ≈ 10 Tage). Die Trägheit des Heizkörpers (≈ 20 min) ist berücksichtigt, Ausreißer wie offene Türen werden heruntergewichtet.
+- Duschen und Kochen: Steigt die Luftfeuchte (Sensor aus der Fenster-Erinnerung) in 10 Minuten um mindestens 3 %-Punkte, werden die folgenden 45 Minuten nicht gelernt.
+- Ventil-Kennlinie: Thermostatventile geben schon bei kleiner Öffnung viel Leistung ab. Das Modell rechnet parallel mit einer linearen, einer leicht und einer stark gekrümmten Kennlinie und nimmt je Raum die passendste (Attribut `ventil_kennlinie`).
+- Sensoren je Raum: *Auskühlrate* (K/h), *Aufheizrate* (K/h, bei voll offenem Ventil) und *Zeit bis Zieltemperatur* (min). Sie bleiben leer, bis Auskühl- und Aufheizrate genau genug vorhergesagt werden (Unsicherheit ≤ 0,10 bzw. 0,20 K/h). Das Attribut `lernstand` zeigt den Fortschritt, `lernt_noch` den Grund, die Aufheizrate zusätzlich Zeitkonstante, Wärmeverlust, Modellfehler und Unsicherheiten.
+- Bekannte Grenze: Bei starken, unerkannten Störungen (Personen, Türen, Sonne) werden die Raten eher etwas zu klein geschätzt, weil das Thermostat auf dieselben Störungen reagiert.
 - In Stufe 1 schaltet das Modell nichts – es zeigt nur, was es gelernt hat.
-- Voraussetzung: Außentemperatur in den Grundeinstellungen; Vorlauffühler und Ventilsensoren je Raum verbessern das Ergebnis.
+- Voraussetzung: Außentemperatur in den Grundeinstellungen; Vorlauffühler, Ventilsensoren und Luftfeuchte je Raum verbessern das Ergebnis.
 
 **Handthermostate**
 - Thermostat-Typ je Raum: *Smartes Thermostat* (wird geregelt) oder *Handthermostat*. Für Handthermostate legt die Integration die Auswahl *Thermostat-Stufe* an (Standard: 0, ❄, 2, 3, 4, 5, je Raum anpassbar) und merkt sich die Einstellung; der Raum zählt nicht zum Heizbedarf. Heizkörper (Typ, Größe) lassen sich je Raum hinterlegen. In der Karte erscheinen die Stufen zum Antippen.

@@ -7,6 +7,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
+import math
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -252,7 +253,8 @@ class Controller:
         }
         self.learn_bootstrapped = False
         self._learn_buf: dict[str, deque] = {}
-        self._learn_lag: dict[str, float | None] = {}
+        self._learn_lag: dict[str, dict[str, float] | None] = {}
+        self._learn_hum: dict[str, learn.HumidityWatch] = {}
         self._learn_last_sample: datetime | None = None
         self._learn_count = 0
         self.log: deque[str] = deque(maxlen=25)
@@ -974,7 +976,10 @@ class Controller:
                 vl=vl,
                 boiler_on=boiler_on,
                 window_open=self._window_blocked(room),
+                hum=self._num_state(room.humidity_sensor),
             )
+            watch = self._learn_hum.setdefault(room.room_id, learn.HumidityWatch())
+            sample.disturbed = watch.step(sample.hum)
             self._learn_lag[room.room_id] = learn.lag_step(self._learn_lag.get(room.room_id), sample)
             sample.heat = self._learn_lag[room.room_id]
             if buf and buf[-1].tin is not None and sample.tin is not None:
@@ -985,10 +990,13 @@ class Controller:
             lr.note_vl(vl, boiler_on)
             w = lr.window_min
             if learn_now and len(buf) >= w + 1:
-                f = learn.window_features(list(buf)[-(w + 1):])
+                seg = list(buf)[-(w + 1):]
+                f = learn.window_features(seg)
                 if f is not None:
                     lr.update(*f)
                     changed = True
+                elif any(x.disturbed for x in seg):
+                    lr.n_disturbed += 1
         if changed:
             self._save()
         self._update_learn_snapshot()
@@ -1013,6 +1021,11 @@ class Controller:
                 "heizwirkung_1_h": round(lr.b, 4),
                 "sonstige_gewinne_k_h": round(lr.c, 2),
                 "modellfehler_k_h": round(lr.rmse, 2),
+                "unsicherheit_auskuehlung_k_h": _round_or_none(lr.sd_cool, 3),
+                "unsicherheit_aufheizung_k_h": _round_or_none(lr.sd_heat, 3),
+                "ventil_kennlinie": learn.CURVE_LABELS[lr.active],
+                "fenster_duschen_kochen": lr.n_disturbed,
+                "lernt_noch": lr.limit_reason,
                 "vorlauf_beim_heizen": round(lr.vl_heat, 1),
                 "cool": None,
                 "heat": None,
@@ -1049,7 +1062,9 @@ class Controller:
         for room in self.rooms:
             if room.room_id not in self.learners:
                 continue
-            ids.update(x for x in (room.temperature_sensor, room.climate, room.window_sensor) if x)
+            ids.update(
+                x for x in (room.temperature_sensor, room.climate, room.window_sensor, room.humidity_sensor) if x
+            )
             ids.update(room.valve_sensors)
         try:
             states = await instance.async_add_executor_job(
@@ -1081,7 +1096,7 @@ class Controller:
             self._save()
             self._update_learn_snapshot()
         self._note(
-            "Lernmodell aus 7 Tagen Verlauf: "
+            f"Lernmodell aus {LEARN_HISTORY_DAYS} Tagen Verlauf: "
             + ", ".join(f"{r.name} {used.get(r.room_id, 0)}" for r in rooms)
             + " Fenster"
         )
@@ -1115,6 +1130,11 @@ class Controller:
         if self.mode == MODE_URLAUB_WEG:
             return "Urlaub weg"
         return f"{MODE_LABELS[self.mode]} – {'alle weg' if self.away else 'zuhause'}"
+
+
+
+def _round_or_none(v: float, digits: int) -> float | None:
+    return None if v is None or math.isinf(v) or math.isnan(v) else round(v, digits)
 
 
 # ---------------------------------------------------------------------- Verlauf -> Minutenreihen
@@ -1161,6 +1181,7 @@ def build_samples(
     vl_g = series.get(flow) if flow else None
     b_g = series.get(boiler, none_grid)
     w_g = series.get(room.window_sensor) if room.window_sensor else None
+    h_g = series.get(room.humidity_sensor) if room.humidity_sensor else None
     v_gs = [series.get(v, none_grid) for v in room.valve_sensors]
     samples: list[learn.Sample] = []
     last_open = -10**9
@@ -1186,6 +1207,7 @@ def build_samples(
                 vl=num(vl_g, m) if vl_g is not None else None,
                 boiler_on=boiler_on,
                 window_open=(m - last_open) <= nachlauf_min,
+                hum=num(h_g, m) if h_g is not None else None,
             )
         )
     return samples
